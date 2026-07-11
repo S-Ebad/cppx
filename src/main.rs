@@ -1,7 +1,9 @@
+mod build;
 mod new;
 mod template;
 
-use clap::{Args, Parser, Subcommand};
+use build::Build;
+use clap::{Parser, Subcommand};
 use new::New;
 
 #[derive(Parser)]
@@ -9,12 +11,6 @@ use new::New;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-}
-
-#[derive(Args)]
-struct Build {
-    #[arg(long)]
-    release: bool,
 }
 
 #[derive(Subcommand)]
@@ -36,11 +32,17 @@ fn main() {
         Commands::New(new) => match new.make_project() {
             Ok(()) => (),
             Err(err) => {
-                eprintln!("error: {}", err);
+                eprintln!("new error: {}", err);
                 std::process::exit(1);
             }
         },
-        Commands::Build(Build { release }) => println!("build: release={}", release),
+        Commands::Build(build) => match build.build_project() {
+            Ok(()) => (),
+            Err(err) => {
+                eprintln!("build error: {}", err);
+                std::process::exit(1);
+            },
+        },
         Commands::Clean => println!("clean:"),
     }
 }
