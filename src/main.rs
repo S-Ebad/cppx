@@ -66,14 +66,6 @@ struct Build {
     release: bool,
 }
 
-// #[derive(Args)]
-// struct Run {
-//     path: String,
-//
-//     #[arg(short = 'v', long = "verbose", default_value_t = 0)]
-//     verbosity: u8,
-// }
-
 #[derive(Subcommand)]
 enum Commands {
     /// Create a project
@@ -81,9 +73,6 @@ enum Commands {
 
     /// Build the project
     Build(Build),
-
-    /// Run a file
-    // Run(Run),
 
     /// Clean build artifacts
     Clean,
@@ -326,9 +315,6 @@ fn main() {
             }
         },
         Commands::Build(Build { release }) => println!("build: release={}", release),
-        // Commands::Run(Run { path, verbosity }) => {
-        //     println!("run: path={} verbose={}", path, verbosity)
-        // }
         Commands::Clean => println!("clean:"),
     }
 }

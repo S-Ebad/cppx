@@ -45,17 +45,11 @@ set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
 set(CMAKE_{LANG}_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# -----------------------------
-# Header-only library target
-# -----------------------------
 add_library(${{PROJECT_NAME}} INTERFACE)
 target_include_directories(${{PROJECT_NAME}} INTERFACE
     include
 )
 
-# -----------------------------
-# Optional local test executable
-# -----------------------------
 if (EXISTS "${{CMAKE_SOURCE_DIR}}/main{LANG_EXT}")
     add_executable(${{PROJECT_NAME}}_test main{LANG_EXT})
     target_link_libraries(${{PROJECT_NAME}}_test PRIVATE ${{PROJECT_NAME}})
@@ -101,11 +95,11 @@ pub const MAIN_H: &str = r#"
 
 void {PROJECT}_hello(void);
 
-#ifdef {PROJECT}_IMPL
+#ifdef {PROJECT_GUARD}_IMPLEMENTATION
 void {PROJECT}_hello(void) {{
     // TODO: lib code
 }}
-#endif // {PROJECT}_IMPL
+#endif // {PROJECT}__IMPLEMENTATION
 #endif // {PROJECT_GUARD}_H
 "#;
 
@@ -113,7 +107,7 @@ pub const GITIGNORE: &str = r#"
 # Build
 build/
 
-# any cache
+# cache
 .cache
 
 # ide cruft
