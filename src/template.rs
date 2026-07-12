@@ -76,7 +76,7 @@ int main(void) {{
 }}
 "#;
 
-pub const MAIN_HPP: &str = r#"#pramga once
+pub const MAIN_HPP: &str = r#"#pragma once
 #include <iostream>
 
 namespace {PROJECT} {{
