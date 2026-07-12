@@ -6,6 +6,9 @@ pub struct Build {
     #[arg(short, long)]
     project: Option<PathBuf>,
 
+    #[arg(short, long)]
+    verbose: bool,
+
     #[arg(long)]
     release: bool,
 
@@ -19,32 +22,26 @@ pub struct Build {
     extra_args: Vec<String>,
 }
 
-fn find_project(base_path: PathBuf) -> Option<PathBuf> {
+fn find_project(base_path: &std::path::Path) -> Option<PathBuf> {
     let resolved_path = fs::canonicalize(base_path).ok()?;
-    let mut base_path = resolved_path.as_path();
 
-    while let Some(parent) = base_path.parent() {
-        let file = base_path.join("CMakeLists.txt");
-
-        if file.is_file() {
-            return Some(parent.to_path_buf());
-        }
-
-        base_path = parent;
-    }
-
-    None
+    resolved_path
+        .ancestors()
+        .find(|dir| dir.join("CMakeLists.txt").is_file())
+        .map(|dir| dir.to_path_buf())
 }
 
-fn remove_file_if_exists(path: &std::path::Path) -> anyhow::Result<()> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err).with_context(|| format!("failed to remove {path:?}")),
-    }
+#[cfg(unix)]
+fn symlink(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(src, dst)
 }
 
-fn create_compile_symlink(build_dir: &std::path::Path) -> anyhow::Result<()> {
+#[cfg(windows)]
+fn symlink(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(src, dst)
+}
+
+fn symlink_compile_commands(build_dir: &std::path::Path) -> anyhow::Result<()> {
     let src = build_dir.join("compile_commands.json");
     let dst = build_dir.join("../compile_commands.json");
 
@@ -56,7 +53,7 @@ fn create_compile_symlink(build_dir: &std::path::Path) -> anyhow::Result<()> {
         fs::remove_file(&dst).with_context(|| format!("failed to delete {dst:?}"))?;
     }
 
-    Ok(())
+    symlink(&src, &dst).context("failed to create symlink")
 }
 
 impl Build {
@@ -64,24 +61,40 @@ impl Build {
         let Build {
             release,
             project,
-            run: _,
+            verbose: _,
+            run,
             build_args,
-            extra_args: _,
+            extra_args,
         } = self;
 
-        let project = project
-            .or_else(|| find_project(PathBuf::from(".")))
-            .context("could not determine project directory (missing CMakeLists.txt)")?;
+        let cwd = std::env::current_dir().context("failed to get current directory")?;
 
-        let build_dir = project
-            .join("build")
-            .join(if release { "release" } else { "debug" });
+        let project = project.map_or_else(
+            || {
+                find_project(&cwd)
+                    .context("could not determine project directory (missing CMakeLists.txt)")
+            },
+            |path| {
+                anyhow::ensure!(path.is_dir(), "{path:?} does not exist");
+                anyhow::ensure!(
+                    path.join("CMakeLists.txt").is_file(),
+                    "{path:?} does not contain a CMakeLists.txt"
+                );
+
+                fs::canonicalize(path).context("failed to canonicalize the project path")
+            },
+        )?;
+
+        // relative
+        let build_dir_rel = PathBuf::from("build").join(if release { "release" } else { "debug" });
+        let build_dir = project.join(&build_dir_rel);
 
         // generate project if it isn't generated already
         if !build_dir.join("CMakeCache.txt").exists() {
             let status = Command::new("cmake")
                 .arg("-B")
                 .arg(&build_dir)
+                .current_dir(&project)
                 .status()
                 .context("failed to run cmake")?;
 
@@ -90,14 +103,40 @@ impl Build {
 
         let status = Command::new("cmake")
             .arg("--build")
-            .arg(&build_dir)
+            .arg(&build_dir_rel)
             .args(&build_args)
+            .current_dir(&project)
             .status()
             .context("failed to run cmake")?;
 
         anyhow::ensure!(status.success(), "cmake build failed with {}", status);
+        symlink_compile_commands(&build_dir)?;
 
-        println!("build: release={} project={:?}", release, project);
+        if run {
+            let filename = project
+                .file_name()
+                .context("project path has no file name")?
+                .to_str()
+                .context("failed to get executable filename")?;
+
+            let exe_path = build_dir.join(filename);
+
+            #[cfg(windows)]
+            let exe_path = exe_path.with_extension("exe");
+
+            anyhow::ensure!(
+                exe_path.is_file(),
+                "expected executable at {exe_path:?}, but it wasn't found"
+            );
+
+            let status = Command::new(&exe_path)
+                .args(&extra_args)
+                .status()
+                .with_context(|| format!("failed to run {exe_path:?}"))?;
+
+            anyhow::ensure!(status.success(), "program exited with {status}");
+        }
+
         Ok(())
     }
 }
