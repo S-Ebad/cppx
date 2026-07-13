@@ -22,13 +22,23 @@ pub struct Build {
     extra_args: Vec<String>,
 }
 
-fn find_project(base_path: &std::path::Path) -> Option<PathBuf> {
+pub fn find_project(base_path: &std::path::Path) -> Option<PathBuf> {
     let resolved_path = fs::canonicalize(base_path).ok()?;
 
     resolved_path
         .ancestors()
         .find(|dir| dir.join("CMakeLists.txt").is_file())
         .map(|dir| dir.to_path_buf())
+}
+
+pub fn validate_project(path: &std::path::Path) -> anyhow::Result<()> {
+    anyhow::ensure!(path.is_dir(), "{path:?} does not exist");
+    anyhow::ensure!(
+        path.join("CMakeLists.txt").is_file(),
+        "{path:?} does not contain a CMakeLists.txt"
+    );
+
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -67,20 +77,15 @@ impl Build {
             extra_args,
         } = self;
 
-        let cwd = std::env::current_dir().context("failed to get current directory")?;
-
         let project = project.map_or_else(
             || {
+                let cwd = std::env::current_dir().context("failed to get current directory")?;
+
                 find_project(&cwd)
                     .context("could not determine project directory (missing CMakeLists.txt)")
             },
             |path| {
-                anyhow::ensure!(path.is_dir(), "{path:?} does not exist");
-                anyhow::ensure!(
-                    path.join("CMakeLists.txt").is_file(),
-                    "{path:?} does not contain a CMakeLists.txt"
-                );
-
+                validate_project(&path)?;
                 fs::canonicalize(path).context("failed to canonicalize the project path")
             },
         )?;
