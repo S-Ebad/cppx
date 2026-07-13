@@ -1,9 +1,11 @@
 mod build;
+mod clean;
 mod new;
 mod template;
 
 use build::Build;
 use clap::{Parser, Subcommand};
+use clean::Clean;
 use new::New;
 
 #[derive(Parser)]
@@ -22,7 +24,7 @@ enum Commands {
     Build(Build),
 
     /// Clean build artifacts
-    Clean,
+    Clean(Clean),
 }
 
 fn main() {
@@ -41,8 +43,14 @@ fn main() {
             Err(err) => {
                 eprintln!("build error: {}", err);
                 std::process::exit(1);
-            },
+            }
         },
-        Commands::Clean => println!("clean:"),
+        Commands::Clean(clean) => match clean.clean_project() {
+            Ok(()) => (),
+            Err(err) => {
+                eprintln!("clean error: {}", err);
+                std::process::exit(1);
+            }
+        },
     }
 }
