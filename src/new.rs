@@ -33,14 +33,14 @@ pub struct New {
 }
 
 impl New {
-    fn validate(std: Std, lang: Lang) -> Result<(), &'static str> {
+    fn validate(std: Std, lang: Lang) -> anyhow::Result<()> {
         match (std, lang) {
             (Std::C89 | Std::C11 | Std::C17 | Std::C23, Lang::Cpp) => {
-                Err("Invalid standard for C++")
+                anyhow::bail!("Invalid standard for C++");
             }
 
             (Std::Cpp11 | Std::Cpp17 | Std::Cpp20 | Std::Cpp23 | Std::Cpp26, Lang::C) => {
-                Err("Invalid standard for C")
+                anyhow::bail!("Invalid standard for C");
             }
 
             _ => Ok(()),
@@ -154,7 +154,7 @@ impl std::fmt::Display for Lang {
 }
 
 impl New {
-    pub fn make_project(self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn make_project(self) -> anyhow::Result<()> {
         let New {
             project,
             lang,
@@ -181,9 +181,9 @@ impl New {
 
         let project_name = project
             .file_name()
-            .ok_or_else(|| "Project path has no file name".to_string())?
+            .ok_or_else(|| anyhow::anyhow!("Project path has no file name"))?
             .to_str()
-            .ok_or_else(|| "Project name is not valid UTF-8".to_string())?;
+            .ok_or_else(|| anyhow::anyhow!("Project name is not valid UTF-8"))?;
 
         let vars: std::collections::HashMap<String, String> = hashmap![
             ("PROJECT".to_string(), project_name.to_string()),
