@@ -4,14 +4,10 @@ use std::fs;
 use strfmt::strfmt;
 
 macro_rules! hashmap {
-    () => {{
-        std::collections::HashMap::new()
-    }};
     ( $( ($a:expr, $b:expr) ),* $(,)? ) => {{
-        let mut _map = std::collections::HashMap::new();
-        $(_map.insert($a, $b);)*
-
-        _map
+        [$(($a, $b),)+]
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>()
     }};
 }
 
