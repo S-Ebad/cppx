@@ -19,6 +19,12 @@ macro_rules! hashmap {
 pub struct New {
     project: std::path::PathBuf,
 
+    #[arg(long)]
+    name: Option<String>,
+
+    #[arg(long)]
+    compiler: Option<Compiler>,
+
     #[arg(long, value_enum, ignore_case = true)]
     lang: Option<Lang>,
 
@@ -28,31 +34,31 @@ pub struct New {
     #[arg(long = "no-clangd")]
     no_clangd: bool,
 
-    #[arg(long = "header-only")]
-    header_only: bool,
+    #[arg(long = "type")]
+    type_: Option<ProjectType>,
 }
 
-impl New {
-    fn validate(std: Std, lang: Lang) -> anyhow::Result<()> {
-        match (std, lang) {
-            (Std::C89 | Std::C11 | Std::C17 | Std::C23, Lang::Cpp) => {
-                anyhow::bail!("Invalid standard for C++");
-            }
-
-            (Std::Cpp11 | Std::Cpp17 | Std::Cpp20 | Std::Cpp23 | Std::Cpp26, Lang::C) => {
-                anyhow::bail!("Invalid standard for C");
-            }
-
-            _ => Ok(()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum Lang {
     #[value(name = "cpp", alias = "c++")]
     Cpp,
     C,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum Compiler {
+    Gcc,
+    Clang,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum ProjectType {
+    #[value(alias = "executable")]
+    Exe,
+    #[value(alias = "library")]
+    Lib,
+    #[value(alias = "header-only")]
+    Header,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -157,16 +163,18 @@ impl New {
     pub fn make_project(self) -> anyhow::Result<()> {
         let New {
             project,
+            name,
+            compiler,
             lang,
             std,
             no_clangd,
-            header_only,
+            type_,
         } = self;
 
-        if project.is_dir() {
-            eprintln!("Project {:?} already exists", project);
-            std::process::exit(1);
-        }
+        anyhow::ensure!(!project.is_dir(), "project {project:?} already exists");
+
+        let compiler = compiler.unwrap_or(Compiler::Gcc);
+        let type_ = type_.unwrap_or(ProjectType::Exe);
 
         let (std, lang) = match (std, lang) {
             (None, None) => (Std::Cpp23, Lang::Cpp),
@@ -179,11 +187,24 @@ impl New {
             }
         };
 
-        let project_name = project
-            .file_name()
-            .ok_or_else(|| anyhow::anyhow!("Project path has no file name"))?
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Project name is not valid UTF-8"))?;
+        // FIXME: Using name currently doesn't work with `build --run`
+        // Build doesn't know if you used a custom name so it still uses the project name
+        let project_name = match name {
+            Some(name) => name,
+            None => project
+                .file_name()
+                .ok_or_else(|| anyhow::anyhow!("project path has no filename"))?
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("project name is not a valid UTF-8"))?
+                .to_string(),
+        };
+
+        let compiler_bin = match (compiler, lang) {
+            (Compiler::Gcc, Lang::Cpp) => "g++",
+            (Compiler::Gcc, Lang::C) => "gcc",
+            (Compiler::Clang, Lang::Cpp) => "clang++",
+            (Compiler::Clang, Lang::C) => "clang",
+        };
 
         let vars: std::collections::HashMap<String, String> = hashmap![
             ("PROJECT".to_string(), project_name.to_string()),
@@ -192,6 +213,7 @@ impl New {
             ("STD_NUM".to_string(), std.get_std_num().to_string()),
             ("LANG".to_string(), lang.to_string()),
             ("LANG_EXT".to_string(), lang.get_ext().to_string()),
+            ("COMPILER".into(), compiler_bin.to_string()),
         ];
 
         let include = project.join("include");
@@ -200,35 +222,6 @@ impl New {
         fs::create_dir(&project)?;
         fs::create_dir(&include)?;
 
-        if header_only {
-            match lang {
-                Lang::Cpp => {
-                    let header_contents = strfmt(template::MAIN_HPP, &vars)?;
-                    fs::write(include.join("main.hpp"), header_contents)?;
-
-                    gitignore.push_str("main.cpp");
-                }
-                Lang::C => {
-                    let header_contents = strfmt(template::MAIN_H, &vars)?;
-                    fs::write(include.join("main.h"), header_contents)?;
-
-                    gitignore.push_str("main.c");
-                }
-            }
-
-            let cmake = project.join("CMakeLists.txt");
-            let cmake_contents = strfmt(template::CMAKE_HEADER, &vars)?;
-
-            fs::write(cmake, cmake_contents)?;
-        } else {
-            let src = project.join("src");
-            let cmake = project.join("CMakeLists.txt");
-            let cmake_contents = strfmt(template::CMAKE, &vars)?;
-
-            fs::create_dir(src)?;
-            fs::write(cmake, cmake_contents)?;
-        }
-
         if !no_clangd {
             let clangd = project.join(".clangd");
 
@@ -236,26 +229,58 @@ impl New {
             fs::write(clangd, contents)?;
         }
 
+        let src: std::path::PathBuf;
+        // FIXME: Currently lib generates a src/main.cpp which contains the main method.
+        // This can cause linker errors when linked with executables that already have a main
+        // method.
+
+        match type_ {
+            ProjectType::Exe | ProjectType::Lib => {
+                src = project.join("src");
+                let cmake = project.join("CMakeLists.txt");
+                let cmake_template = if type_ == ProjectType::Exe {
+                    template::CMAKE
+                } else {
+                    template::CMAKE_LIB
+                };
+                let cmake_contents = strfmt(cmake_template, &vars)?;
+
+                fs::create_dir(&src)?;
+                fs::write(cmake, cmake_contents)?;
+            }
+
+            ProjectType::Header => {
+                match lang {
+                    Lang::Cpp => {
+                        let header_contents = strfmt(template::MAIN_HPP, &vars)?;
+                        fs::write(include.join("main.hpp"), header_contents)?;
+
+                        gitignore.push_str("main.cpp");
+                    }
+                    Lang::C => {
+                        let header_contents = strfmt(template::MAIN_H, &vars)?;
+                        fs::write(include.join("main.h"), header_contents)?;
+
+                        gitignore.push_str("main.c");
+                    }
+                }
+
+                let cmake = project.join("CMakeLists.txt");
+                let cmake_contents = strfmt(template::CMAKE_HEADER, &vars)?;
+                src = project.clone();
+
+                fs::write(cmake, cmake_contents)?;
+            }
+        }
+
         match lang {
             Lang::Cpp => {
-                let src = if header_only {
-                    project.join("main.cpp")
-                } else {
-                    project.join("src/main.cpp")
-                };
-
-                let main_cpp = strfmt(template::MAIN_CPP, &vars)?;
-                fs::write(src, main_cpp)?;
+                let main_cpp = src.join("main.cpp");
+                fs::write(main_cpp, strfmt(template::MAIN_CPP, &vars)?)?;
             }
             Lang::C => {
-                let src = if header_only {
-                    project.join("main.c")
-                } else {
-                    project.join("src/main.c")
-                };
-
-                let main_c = strfmt(template::MAIN_C, &vars)?;
-                fs::write(src, main_c)?;
+                let main_c = src.join("main.c");
+                fs::write(main_c, strfmt(template::MAIN_C, &vars)?)?;
             }
         }
 
@@ -270,9 +295,23 @@ impl New {
         }
 
         println!(
-            "Created: {:?} (lang={}, std={}, no-clangd={:?}, header-only={:?})",
-            project, lang, std, no_clangd, header_only
+            "Created: {} (lang={}, std={}, no-clangd={:?}, type={:?}, compiler={})",
+            project_name, lang, std, no_clangd, type_, compiler_bin
         );
         Ok(())
+    }
+
+    fn validate(std: Std, lang: Lang) -> anyhow::Result<()> {
+        match (std, lang) {
+            (Std::C89 | Std::C11 | Std::C17 | Std::C23, Lang::Cpp) => {
+                anyhow::bail!("Invalid standard for C++");
+            }
+
+            (Std::Cpp11 | Std::Cpp17 | Std::Cpp20 | Std::Cpp23 | Std::Cpp26, Lang::C) => {
+                anyhow::bail!("Invalid standard for C");
+            }
+
+            _ => Ok(()),
+        }
     }
 }

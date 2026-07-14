@@ -8,13 +8,13 @@ CompileFlags:
 
 pub const CMAKE: &str = r#"
 cmake_minimum_required(VERSION 3.16)
-
-project({PROJECT} LANGUAGES {LANG})
-
 set(CMAKE_{LANG}_STANDARD {STD_NUM})
 set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
 set(CMAKE_{LANG}_EXTENSIONS OFF)
+set(CMAKE_{LANG}_COMPILER {COMPILER})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+project({PROJECT} LANGUAGES {LANG})
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     "src/*{LANG_EXT}"
@@ -37,13 +37,13 @@ endif()
 
 pub const CMAKE_HEADER: &str = r#"
 cmake_minimum_required(VERSION 3.16)
-
-project({PROJECT} LANGUAGES {LANG})
-
 set(CMAKE_{LANG}_STANDARD {STD_NUM})
 set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
 set(CMAKE_{LANG}_EXTENSIONS OFF)
+set(CMAKE_{LANG}_COMPILER {COMPILER})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+project({PROJECT} LANGUAGES {LANG})
 
 add_library(${{PROJECT_NAME}} INTERFACE)
 target_include_directories(${{PROJECT_NAME}} INTERFACE
@@ -61,6 +61,35 @@ if (EXISTS "${{CMAKE_SOURCE_DIR}}/main{LANG_EXT}")
             -Wpedantic
         )
     endif()
+endif()
+"#;
+
+pub const CMAKE_LIB: &str = r#"
+cmake_minimum_required(VERSION 3.16)
+set(CMAKE_{LANG}_STANDARD {STD_NUM})
+set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
+set(CMAKE_{LANG}_EXTENSIONS OFF)
+set(CMAKE_{LANG}_COMPILER {COMPILER})
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+project({PROJECT} LANGUAGES {LANG})
+
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+    "src/*{LANG_EXT}"
+)
+
+add_library(${{PROJECT_NAME}} STATIC ${{SOURCES}})
+
+target_include_directories(${{PROJECT_NAME}} PUBLIC
+    include
+)
+
+if (CMAKE_{LANG}_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(${{PROJECT_NAME}} PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+    )
 endif()
 "#;
 
