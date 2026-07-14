@@ -23,7 +23,7 @@ pub struct New {
     name: Option<String>,
 
     #[arg(long)]
-    compiler: Option<Compiler>,
+    compiler: Compiler,
 
     #[arg(long, value_enum, ignore_case = true)]
     lang: Option<Lang>,
@@ -35,7 +35,7 @@ pub struct New {
     no_clangd: bool,
 
     #[arg(long = "type")]
-    type_: Option<ProjectType>,
+    type_: ProjectType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -45,14 +45,16 @@ enum Lang {
     C,
 }
 
-#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
 enum Compiler {
+    #[default]
     Gcc,
     Clang,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, clap::ValueEnum)]
 enum ProjectType {
+    #[default]
     #[value(alias = "executable")]
     Exe,
     #[value(alias = "library")]
@@ -172,9 +174,6 @@ impl New {
         } = self;
 
         anyhow::ensure!(!project.is_dir(), "project {project:?} already exists");
-
-        let compiler = compiler.unwrap_or(Compiler::Gcc);
-        let type_ = type_.unwrap_or(ProjectType::Exe);
 
         let (std, lang) = match (std, lang) {
             (None, None) => (Std::Cpp23, Lang::Cpp),
