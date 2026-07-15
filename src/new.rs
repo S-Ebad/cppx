@@ -18,7 +18,7 @@ pub struct New {
     #[arg(long)]
     name: Option<String>,
 
-    #[arg(long)]
+    #[arg(long, default_value_t=Compiler::Gcc)]
     compiler: Compiler,
 
     #[arg(long, value_enum, ignore_case = true)]
@@ -30,7 +30,7 @@ pub struct New {
     #[arg(long = "no-clangd")]
     no_clangd: bool,
 
-    #[arg(long = "type")]
+    #[arg(long = "type", default_value_t=ProjectType::Exe)]
     type_: ProjectType,
 }
 
@@ -153,6 +153,25 @@ impl std::fmt::Display for Lang {
         match self {
             Lang::Cpp => write!(f, "CXX"),
             Lang::C => write!(f, "C"),
+        }
+    }
+}
+
+impl std::fmt::Display for Compiler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Compiler::Gcc => write!(f, "gcc"),
+            Compiler::Clang => write!(f, "clang"),
+        }
+    }
+}
+
+impl std::fmt::Display for ProjectType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProjectType::Exe => write!(f, "executable"),
+            ProjectType::Lib => write!(f, "library"),
+            ProjectType::Header => write!(f, "header-only"),
         }
     }
 }
