@@ -312,6 +312,10 @@ impl New {
             "Created: {} (lang={}, std={}, no-clangd={:?}, type={:?}, compiler={})",
             project_name, lang, std, no_clangd, type_, compiler_bin
         );
+
+        let config = crate::config::Config::new(project_name);
+        config.make_config(&project)?;
+
         Ok(())
     }
 

@@ -1,5 +1,6 @@
 mod build;
 mod clean;
+mod config;
 mod new;
 mod template;
 
