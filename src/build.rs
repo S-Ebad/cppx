@@ -20,7 +20,7 @@ pub struct Build {
     parallel: bool,
 
     #[arg(short = 'G')]
-    generator: Generator,
+    generator: Option<Generator>,
 
     #[arg(long)]
     clean_first: bool,
@@ -165,8 +165,7 @@ impl Build {
             let status = Command::new("cmake")
                 .arg("-B")
                 .arg(&build_dir_rel)
-                .arg("-G")
-                .arg(generator.as_str())
+                .args(generator.map(|g| ["-G", g.as_str()]).into_iter().flatten())
                 .args(
                     cmake_options
                         .into_iter()
