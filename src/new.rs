@@ -301,6 +301,11 @@ impl New {
             eprintln!("failed to initialize git: {}", err);
         }
 
+        #[cfg(windows)]
+        eprintln!(
+            "warning: symlinking compile_commands.json is not supported on Windows; clangd may not find it automatically"
+        );
+
         println!(
             "Created: {} (lang={}, std={}, no-clangd={:?}, type={:?}, compiler={})",
             project_name, lang, std, no_clangd, type_, compiler_bin

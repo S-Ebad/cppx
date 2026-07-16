@@ -47,8 +47,8 @@ fn symlink(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> 
 }
 
 #[cfg(windows)]
-fn symlink(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_file(src, dst)
+fn symlink(_: &std::path::Path, _: &std::path::Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 fn symlink_compile_commands(build_dir: &std::path::Path) -> anyhow::Result<()> {
@@ -86,7 +86,7 @@ impl Build {
             },
             |path| {
                 validate_project(&path)?;
-                fs::canonicalize(path).context("failed to canonicalize the project path")
+                Ok(path)
             },
         )?;
 
@@ -98,7 +98,7 @@ impl Build {
         if !build_dir.join("CMakeCache.txt").exists() {
             let status = Command::new("cmake")
                 .arg("-B")
-                .arg(&build_dir)
+                .arg(&build_dir_rel)
                 .current_dir(&project)
                 .status()
                 .context("failed to run cmake")?;
