@@ -6,7 +6,7 @@ CompileFlags:
         - -Wextra
 "#;
 
-pub const CMAKE: &str = r#"
+pub const CMAKE_EXE: &str = r#"
 cmake_minimum_required(VERSION 3.16)
 set(CMAKE_{LANG}_STANDARD {STD_NUM})
 set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
@@ -102,6 +102,24 @@ pub const MAIN_C: &str = r#"#include <stdio.h>
 
 int main(void) {{
     printf("Hello from {PROJECT}\n");
+}}
+"#;
+
+pub const LIB_CPP: &str = r#"
+#include <iostream>
+
+namespace {PROJECT} {{
+void main() {{
+    std::cout << "Hello from {PROJECT}";
+}}
+}}
+"#;
+
+pub const LIB_C: &str = r#"
+#include <stdio.h>
+
+void {PROJECT}_main() {{
+    printf("Hello from {PROJECT}");
 }}
 "#;
 

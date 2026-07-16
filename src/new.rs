@@ -1,6 +1,7 @@
 use crate::template;
 
 use std::fs;
+use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
 
 macro_rules! hashmap {
@@ -41,8 +42,8 @@ enum Lang {
     C,
 }
 
-#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
-enum Compiler {
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum, Serialize, Deserialize)]
+pub enum Compiler {
     #[default]
     Gcc,
     Clang,
@@ -189,6 +190,7 @@ impl New {
         } = self;
 
         anyhow::ensure!(!project.is_dir(), "project {project:?} already exists");
+        fs::create_dir(&project)?;
 
         let (std, lang) = match (std, lang) {
             (None, None) => (Std::Cpp23, Lang::Cpp),
@@ -230,12 +232,6 @@ impl New {
             ("COMPILER".into(), compiler_bin.to_string()),
         ];
 
-        let include = project.join("include");
-        let mut gitignore = String::from(template::GITIGNORE);
-
-        fs::create_dir(&project)?;
-        fs::create_dir(&include)?;
-
         if !no_clangd {
             let clangd = project.join(".clangd");
 
@@ -243,58 +239,55 @@ impl New {
             fs::write(clangd, contents)?;
         }
 
-        let src: std::path::PathBuf;
-        // FIXME: Currently lib generates a src/main.cpp which contains the main method.
-        // This can cause linker errors when linked with executables that already have a main
-        // method.
+        let cmake_template = match type_ {
+            ProjectType::Exe => template::CMAKE_EXE,
+            ProjectType::Lib => template::CMAKE_LIB,
+            ProjectType::Header => template::CMAKE_HEADER,
+        };
+        let (src_file, hdr_file) = match lang {
+            Lang::Cpp => ("main.cpp", "main.hpp"),
+            Lang::C => ("main.c", "main.h"),
+        };
+
+        let cmake = project.join("CMakeLists.txt");
+        let cmake_contents = strfmt(cmake_template, &vars)?;
+        let include = project.join("include");
+        let mut gitignore = String::from(template::GITIGNORE);
+
+        fs::write(cmake, cmake_contents)?;
+        fs::create_dir(&include)?;
 
         match type_ {
             ProjectType::Exe | ProjectType::Lib => {
-                src = project.join("src");
-                let cmake = project.join("CMakeLists.txt");
-                let cmake_template = if type_ == ProjectType::Exe {
-                    template::CMAKE
-                } else {
-                    template::CMAKE_LIB
+                let src = project.join("src");
+                let template = match (type_, lang) {
+                    (ProjectType::Exe, Lang::Cpp) => strfmt(template::MAIN_CPP, &vars)?,
+                    (ProjectType::Exe, Lang::C) => strfmt(template::MAIN_C, &vars)?,
+
+                    (ProjectType::Lib, Lang::Cpp) => strfmt(template::LIB_CPP, &vars)?,
+                    (ProjectType::Lib, Lang::C) => strfmt(template::LIB_C, &vars)?,
+
+                    _ => unreachable!(),
                 };
-                let cmake_contents = strfmt(cmake_template, &vars)?;
 
                 fs::create_dir(&src)?;
-                fs::write(cmake, cmake_contents)?;
+                fs::write(src.join(src_file), template)?;
             }
-
             ProjectType::Header => {
-                match lang {
-                    Lang::Cpp => {
-                        let header_contents = strfmt(template::MAIN_HPP, &vars)?;
-                        fs::write(include.join("main.hpp"), header_contents)?;
+                let (template_hdr, template_src) = match lang {
+                    Lang::Cpp => (
+                        strfmt(template::MAIN_HPP, &vars)?,
+                        strfmt(template::MAIN_CPP, &vars)?,
+                    ),
+                    Lang::C => (
+                        strfmt(template::MAIN_H, &vars)?,
+                        strfmt(template::MAIN_C, &vars)?,
+                    ),
+                };
 
-                        gitignore.push_str("main.cpp");
-                    }
-                    Lang::C => {
-                        let header_contents = strfmt(template::MAIN_H, &vars)?;
-                        fs::write(include.join("main.h"), header_contents)?;
-
-                        gitignore.push_str("main.c");
-                    }
-                }
-
-                let cmake = project.join("CMakeLists.txt");
-                let cmake_contents = strfmt(template::CMAKE_HEADER, &vars)?;
-                src = project.clone();
-
-                fs::write(cmake, cmake_contents)?;
-            }
-        }
-
-        match lang {
-            Lang::Cpp => {
-                let main_cpp = src.join("main.cpp");
-                fs::write(main_cpp, strfmt(template::MAIN_CPP, &vars)?)?;
-            }
-            Lang::C => {
-                let main_c = src.join("main.c");
-                fs::write(main_c, strfmt(template::MAIN_C, &vars)?)?;
+                fs::write(include.join(hdr_file), template_hdr)?;
+                fs::write(project.join(src_file), template_src)?;
+                gitignore.push_str(src_file); // ignore it so its not committed
             }
         }
 
