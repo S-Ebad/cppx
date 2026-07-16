@@ -14,7 +14,7 @@ pub struct Config {
     #[serde(rename = "build-type")]
     build_type: BuildType,
 
-    #[serde(default, rename="cmake-options")]
+    #[serde(default, rename = "cmake-options")]
     cmake_options: Vec<String>,
 }
 
@@ -56,15 +56,12 @@ impl Config {
     // write it as a json file
     #[allow(unused)]
     pub fn make_config(self, project: &std::path::Path) -> anyhow::Result<()> {
-        anyhow::ensure!(project.is_dir(),
-            "{project:?} doesn't exist");
+        anyhow::ensure!(project.is_dir(), "{project:?} doesn't exist");
 
         let json = serde_json::to_string_pretty(&self)?;
         let file = project.join(".cppx.json");
 
         std::fs::write(file, json)?;
-
-        println!("Made config '.cppx.json'");
         Ok(())
     }
 
