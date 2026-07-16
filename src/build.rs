@@ -1,5 +1,5 @@
 use anyhow::Context;
-use std::{fs, path::PathBuf, process::Command};
+use std::{fs, num::NonZeroU16, path::PathBuf, process::Command};
 
 #[derive(clap::Args)]
 pub struct Build {
@@ -14,6 +14,12 @@ pub struct Build {
 
     #[arg(long)]
     run: bool,
+
+    #[arg(short, long, default_value_t=NonZeroU16::MIN)]
+    jobs: NonZeroU16,
+
+    #[arg(long, conflicts_with = "jobs")]
+    parallel: bool,
 
     #[arg(long)]
     build_args: Vec<String>,
@@ -69,14 +75,28 @@ fn symlink_compile_commands(build_dir: &std::path::Path) -> anyhow::Result<()> {
 impl Build {
     pub fn build_project(self) -> anyhow::Result<()> {
         let Build {
-            release,
             project,
             verbose: _,
+            release,
             run,
+            jobs,
+            parallel,
             build_args,
             extra_args,
         } = self;
 
+        let max_jobs = std::thread::available_parallelism()
+            .map(|n| n.get() as u16)
+            .unwrap_or_else(|_| {
+                eprintln!("warning: could not detect available parallelism, defaulting to 1");
+                1
+            });
+
+        let jobs = if parallel {
+            max_jobs
+        } else {
+            jobs.get().min(max_jobs)
+        };
         let project = project.map_or_else(
             || {
                 let cwd = std::env::current_dir().context("failed to get current directory")?;
@@ -109,6 +129,8 @@ impl Build {
         let status = Command::new("cmake")
             .arg("--build")
             .arg(&build_dir_rel)
+            .arg("-j")
+            .arg(jobs.to_string())
             .args(&build_args)
             .current_dir(&project)
             .status()
