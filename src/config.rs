@@ -1,3 +1,4 @@
+use crate::build::{BuildType, Generator};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -16,20 +17,6 @@ pub struct Config {
 
     #[serde(default, rename = "cmake-options")]
     cmake_options: Vec<String>,
-}
-
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
-pub enum Generator {
-    Makefile,
-    Ninja,
-    VisualStudio,
-}
-
-#[derive(Clone, Copy, Serialize, Default, Deserialize, Debug)]
-pub enum BuildType {
-    #[default]
-    Debug,
-    Release,
 }
 
 impl Default for Config {

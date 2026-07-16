@@ -1,4 +1,5 @@
 use anyhow::Context;
+use serde::{Deserialize, Serialize};
 use std::{fs, num::NonZeroU16, path::PathBuf, process::Command};
 
 #[derive(clap::Args)]
@@ -6,11 +7,8 @@ pub struct Build {
     #[arg(short, long)]
     project: Option<PathBuf>,
 
-    #[arg(short, long)]
-    verbose: bool,
-
-    #[arg(long)]
-    release: bool,
+    #[arg(long, default_value="debug")]
+    profile: BuildType,
 
     #[arg(long)]
     run: bool,
@@ -21,11 +19,47 @@ pub struct Build {
     #[arg(long, conflicts_with = "jobs")]
     parallel: bool,
 
+    #[arg(short = 'G')]
+    generator: Generator,
+
+    #[arg(long)]
+    clean_first: bool,
+
+    #[arg(short = 'D')]
+    cmake_options: Vec<String>,
+
     #[arg(long)]
     build_args: Vec<String>,
 
+    #[arg(long)]
+    config_args: Vec<String>,
+
     #[arg(last = true, requires = "run")]
     extra_args: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub enum BuildType {
+    #[default]
+    Debug,
+    Release,
+}
+
+#[derive(Serialize, Deserialize, clap::ValueEnum, Debug, Clone, Copy)]
+pub enum Generator {
+    Makefile,
+    Ninja,
+    VisualStudio,
+}
+
+impl Generator {
+    fn as_str(self) -> &'static str {
+        match self {
+            Generator::Makefile => "Unix Makefiles",
+            Generator::Ninja => "Ninja",
+            Generator::VisualStudio => "Visual Studio 17 2022",
+        }
+    }
 }
 
 pub fn find_project(base_path: &std::path::Path) -> Option<PathBuf> {
@@ -65,7 +99,7 @@ fn symlink_compile_commands(build_dir: &std::path::Path) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if dst.is_file() {
+    if dst.symlink_metadata().is_ok() {
         fs::remove_file(&dst).with_context(|| format!("failed to delete {dst:?}"))?;
     }
 
@@ -76,14 +110,17 @@ impl Build {
     pub fn build_project(self) -> anyhow::Result<()> {
         let Build {
             project,
-            verbose: _,
-            release,
+            profile,
             run,
             jobs,
             parallel,
+            generator,
+            clean_first,
+            mut cmake_options,
             build_args,
+            config_args,
             extra_args,
-        } = self;
+        }: Build = self;
 
         let max_jobs = std::thread::available_parallelism()
             .map(|n| n.get() as u16)
@@ -110,8 +147,17 @@ impl Build {
             },
         )?;
 
+        let profile_str = if profile == BuildType::Release {
+            "Release"
+        } else {
+            "Debug"
+        };
+
+        // pre-defined cmake options here
+        cmake_options.push(format!("CMAKE_BUILD_TYPE={}", profile_str));
+
         // relative
-        let build_dir_rel = PathBuf::from("build").join(if release { "release" } else { "debug" });
+        let build_dir_rel = PathBuf::from("build").join(profile_str);
         let build_dir = project.join(&build_dir_rel);
 
         // generate project if it isn't generated already
@@ -119,6 +165,14 @@ impl Build {
             let status = Command::new("cmake")
                 .arg("-B")
                 .arg(&build_dir_rel)
+                .arg("-G")
+                .arg(generator.as_str())
+                .args(
+                    cmake_options
+                        .into_iter()
+                        .flat_map(|opt| ["-D".to_string(), opt]),
+                )
+                .args(config_args)
                 .current_dir(&project)
                 .status()
                 .context("failed to run cmake")?;
@@ -128,10 +182,11 @@ impl Build {
 
         let status = Command::new("cmake")
             .arg("--build")
-            .arg(&build_dir_rel)
+            .arg(build_dir_rel)
             .arg("-j")
             .arg(jobs.to_string())
-            .args(&build_args)
+            .args(build_args)
+            .args(clean_first.then_some("--clean-first"))
             .current_dir(&project)
             .status()
             .context("failed to run cmake")?;
