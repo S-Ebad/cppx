@@ -10,7 +10,7 @@ use clean::Clean;
 use new::New;
 
 #[derive(Parser)]
-#[command(name = "cppx")]
+#[command(name = "cppx", version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
