@@ -24,7 +24,8 @@ impl Clean {
             },
         )?;
 
-        let build_dir = project.join("build");
+        let config = crate::config::Config::get_config(&project)?.unwrap_or_default();
+        let build_dir = project.join(&config.build_dir);
 
         anyhow::ensure!(build_dir.is_dir(), "no build directory to clean");
         std::fs::remove_dir_all(build_dir)
