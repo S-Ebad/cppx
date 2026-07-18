@@ -1,7 +1,7 @@
 use crate::template;
 
-use std::fs;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use strfmt::strfmt;
 
 macro_rules! hashmap {
@@ -16,7 +16,7 @@ macro_rules! hashmap {
 pub struct New {
     project: std::path::PathBuf,
 
-    #[arg(long)]
+    #[arg(long, value_parser = parse_name)]
     name: Option<String>,
 
     #[arg(long, default_value_t=Compiler::Gcc)]
@@ -177,6 +177,28 @@ impl std::fmt::Display for ProjectType {
     }
 }
 
+fn parse_name(s: &str) -> Result<String, String> {
+    if s.is_empty() {
+        Err("name cannot be empty".to_string())
+    } else {
+        Ok(s.to_string())
+    }
+}
+
+fn sanitize(name: &str) -> String {
+    let mut result = name
+        .chars()
+        .map(|c| if c == '-' { '_' } else { c })
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect::<String>();
+
+    if result.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        result.insert(0, '_');
+    }
+
+    result
+}
+
 impl New {
     pub fn make_project(self) -> anyhow::Result<()> {
         let New {
@@ -203,8 +225,6 @@ impl New {
             }
         };
 
-        // FIXME: Using name currently doesn't work with `build --run`
-        // Build doesn't know if you used a custom name so it still uses the project name
         let project_name = match name {
             Some(name) => name,
             None => project
@@ -215,6 +235,8 @@ impl New {
                 .to_string(),
         };
 
+        let project_ident = sanitize(&project_name);
+
         let compiler_bin = match (compiler, lang) {
             (Compiler::Gcc, Lang::Cpp) => "g++",
             (Compiler::Gcc, Lang::C) => "gcc",
@@ -224,7 +246,8 @@ impl New {
 
         let vars: std::collections::HashMap<String, String> = hashmap![
             ("PROJECT".to_string(), project_name.to_string()),
-            ("PROJECT_GUARD".to_string(), project_name.to_uppercase()),
+            ("PROJECT_GUARD".to_string(), project_ident.to_uppercase()),
+            ("PROJECT_IDENT".to_string(), project_ident),
             ("STD".to_string(), std.to_string()),
             ("STD_NUM".to_string(), std.get_std_num().to_string()),
             ("LANG".to_string(), lang.to_string()),

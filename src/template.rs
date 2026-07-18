@@ -95,22 +95,22 @@ endif()
 
 pub const MAIN_CPP: &str = r#"#include <iostream>
 int main() {{
-  std::cout << "Hello from {PROJECT}" << std::endl;
+  std::cout << "Hello from {PROJECT_IDENT}" << std::endl;
 }}"#;
 
 pub const MAIN_C: &str = r#"#include <stdio.h>
 
 int main(void) {{
-    printf("Hello from {PROJECT}\n");
+    printf("Hello from {PROJECT_IDENT}\n");
 }}
 "#;
 
 pub const LIB_CPP: &str = r#"
 #include <iostream>
 
-namespace {PROJECT} {{
+namespace {PROJECT_IDENT} {{
 void main() {{
-    std::cout << "Hello from {PROJECT}";
+    std::cout << "Hello from {PROJECT_IDENT}";
 }}
 }}
 "#;
@@ -118,21 +118,21 @@ void main() {{
 pub const LIB_C: &str = r#"
 #include <stdio.h>
 
-void {PROJECT}_main() {{
-    printf("Hello from {PROJECT}");
+void {PROJECT_IDENT}_main() {{
+    printf("Hello from {PROJECT_IDENT}");
 }}
 "#;
 
 pub const MAIN_HPP: &str = r#"#pragma once
 #include <iostream>
 
-namespace {PROJECT} {{
+namespace {PROJECT_IDENT} {{
 
 inline void hello() {{
     // TODO: lib code
 }}
 
-}} // namespace {PROJECT}
+}} // namespace {PROJECT_IDENT}
 "#;
 
 pub const MAIN_H: &str = r#"
@@ -140,13 +140,13 @@ pub const MAIN_H: &str = r#"
 #define {PROJECT_GUARD}_H
 #include <stdio.h>
 
-void {PROJECT}_hello(void);
+void {PROJECT_IDENT}_hello(void);
 
 #ifdef {PROJECT_GUARD}_IMPLEMENTATION
-void {PROJECT}_hello(void) {{
+void {PROJECT_IDENT}_hello(void) {{
     // TODO: lib code
 }}
-#endif // {PROJECT}__IMPLEMENTATION
+#endif // {PROJECT_GUARD}_IMPLEMENTATION
 #endif // {PROJECT_GUARD}_H
 "#;
 
