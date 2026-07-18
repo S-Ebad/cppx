@@ -10,13 +10,16 @@ Projects created with cppx remain normal CMake projects and can be built without
 
 ## Current Features
 
-- Generate C/C++ projects (executable or header-only)
+- Generate C/C++ projects: executable, static library, or header-only
 - Optional `.clangd` config generation
 - Build projects through CMake, with debug/release output directories
 - Run the built executable, optionally passing extra args through
 - Clean build artifacts
 - Automatic project discovery (walks upward to find `CMakeLists.txt`)
-- Pass extra build arguments straight to `cmake --build`
+- Persistent per-project settings via `.cppx.json`, merged with CLI flags (`CLI > config > default`)
+- Choose a CMake generator (Ninja, Unix Makefiles, Visual Studio)
+- Parallel builds, with automatic core detection
+- Pass CMake cache variables (`-D`) and raw passthrough args to both the configure and build steps
 
 ## Usage
 
@@ -26,17 +29,7 @@ Projects created with cppx remain normal CMake projects and can be built without
 cppx new <PROJECT>
 ```
 
-`PROJECT` is a positional path — the directory is created at that location, and the project name is taken from its final path component.
-
-Options:
-
-| Flag | Description |
-|---|---|
-| `--lang <cpp\|c>` | Project language. Default: `cpp` |
-| `--std <STANDARD>` | Language standard (e.g. `c++20`, `c17`). Default: latest supported for the chosen language (`c++23` / `c23`) |
-| `--no-clangd` | Skip generating a `.clangd` file |
-| `--header-only` | Generate a header-only library layout instead of an executable |
-
+`PROJECT` is a positional path. The directory is created at that location, and the project name is taken from its final path component unless `--name` is given.
 If you only pass `--std`, the language is inferred from it. If you pass both `--lang` and `--std`, they must be compatible (e.g. `--lang c --std c++20` is rejected).
 
 Examples:
@@ -44,14 +37,17 @@ Examples:
 ```bash
 cppx new hello
 cppx new hello --lang cpp --std c++23
-cppx new mylib --header-only --lang c
+cppx new mylib --type library --lang c
+cppx new mylib --type header-only
 ```
 
-A standard project gets a `src/` directory and an executable-oriented `CMakeLists.txt`.
+- `exe` and `library` projects get a `src/` directory with a generated main source file, and a matching executable- or library-oriented `CMakeLists.txt`.
+- `header-only` projects put the library code in `include/main.hpp` (or `main.h` for C). A scratch `main.cpp`/`main.c` is also generated at the project root for testing the header. It's added to `.gitignore` so it's never committed, and `CMakeLists.txt` only builds a `<name>_test` executable from it if that file happens to be present.
+- `library` projects generate stub code with no `main` symbol, so they can be linked into an executable without colliding.
 
-A `--header-only` project puts the library code in `include/main.hpp` (or `include/main.h` for C) and generates a library-oriented CMakeLists.txt. A main.cpp/main.c is also generated at the project root as a scratch file for testing the header but it's added to .gitignore so it's never committed, and CMakeLists.txt only builds the <PROJECT>_test executable from it if that file happens to be present
+Project/executable names are sanitized separately for use as C/C++ identifiers (namespaces, function prefixes, header guards). The raw name is still used for the CMake project name and directory.
 
-Either way, `git init` is run automatically in the new directory
+Either way, `git init` is run automatically in the new directory, and a `.cppx.json` is written with the resolved settings.
 
 ---
 
@@ -69,24 +65,15 @@ Or specify a project explicitly:
 cppx build --project path/to/project
 ```
 
-Options:
-
-| Flag | Description |
-|---|---|
-| `-p, --project <PATH>` | Project directory. Default: walk upward from cwd to find `CMakeLists.txt` |
-| `--release` | Build into `build/release` instead of `build/debug` |
-| `--run` | Run the built executable after a successful build |
-| `--build-args <ARGS>...` | Extra arguments passed through to `cmake --build` |
-| `-- <ARGS>...` | Extra arguments passed to the executable itself (requires `--run`) |
-
-Build output goes to `build/debug/` or `build/release/` depending on `--release`. On first build, cppx runs `cmake -B <build-dir>` to configure; subsequent builds skip configuration if a cache already exists. A `compile_commands.json` symlink is created at the project root for editor tooling.
+Build output goes to `<build-dir>/Debug` or `<build-dir>/Release` (`build-dir` configurable via `.cppx.json`, default `build`). On first build, cppx runs `cmake -B` to configure; subsequent builds skip configuration if a cache already exists. A `compile_commands.json` symlink is created at the project root for editor tooling (not supported on Windows).
 
 Examples:
 
 ```bash
-cppx build --build-args --parallel
-cppx build --release --run
+cppx build --parallel
+cppx build --profile release --run
 cppx build --run -- --some-flag
+cppx build -D CMAKE_EXPORT_COMPILE_COMMANDS=ON
 ```
 
 ---
@@ -101,7 +88,15 @@ cppx clean
 cppx clean --project path/to/project
 ```
 
-Removes the `build/` directory. Fails if there isn't one.
+Removes the build directory (respects `build-dir` from `.cppx.json` if present). Fails if there isn't one.
+
+---
+
+### Project configuration (`.cppx.json`)
+
+Every project created with `cppx new` gets a `.cppx.json` file. `cppx build` and `cppx clean` read it automatically; CLI flags always take priority over it, and hardcoded defaults are used for anything neither specifies.
+
+There's currently no CLI for editing `.cppx.json`. It's a plain JSON file, edit it directly. To remove config entirely, delete the file.
 
 ## Design Goals
 
@@ -109,14 +104,9 @@ cppx generates the initial project structure, but after that the generated `CMak
 
 ## Planned Features
 
-Design is tracked toward a `cppx.json`-based config, not yet implemented:
-
-- `cppx config` (`--show`, `--set`, `--get`, `--unset`, `reset`)
-- Persistent settings via `cppx.json`: generator, jobs, build-type, build-dir, cmake-options, compiler
-- `--name` (separate executable/target name from project directory name)
-- `--compiler <gcc|clang>` on `new`
-- `--type <exe|library|header-only>` (replacing/extending `--header-only`)
-- `build -j/--jobs`, `--profile <debug|release>` (replacing `--release`), `--no-config`, `--clean-first`, `-D <OPTION>` for CMake cache variables
+- `cppx run`, splitting `build --run` into its own subcommand (build-then-run, cargo-style)
+- `cppx config` (`--show`, `--set`, `--get`, `--unset`, `reset`) not yet decided whether this is worth it over editing `.cppx.json` directly
+- Configurable Visual Studio generator version (currently hardcoded)
 
 ## Why?
 
