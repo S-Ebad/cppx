@@ -1,22 +1,27 @@
-use crate::build::{BuildType, Generator};
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
+use std::fs;
+
+use crate::build::{BuildType, Generator};
+
+const CONFIG_FILE: &str = ".cppx.json";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
-    name: String,
+    pub name: String,
 
-    generator: Option<Generator>,
+    pub generator: Option<Generator>,
 
-    jobs: u32,
+    pub jobs: u16,
 
     #[serde(rename = "build-dir")]
-    build_dir: String,
+    pub build_dir: std::path::PathBuf,
 
     #[serde(rename = "build-type")]
-    build_type: BuildType,
+    pub profile: BuildType,
 
     #[serde(default, rename = "cmake-options")]
-    cmake_options: Vec<String>,
+    pub cmake_options: Vec<String>,
 }
 
 impl Default for Config {
@@ -24,8 +29,8 @@ impl Default for Config {
         Self {
             generator: None,
             jobs: 1,
-            build_dir: String::from("build"),
-            build_type: BuildType::default(),
+            build_dir: std::path::PathBuf::from("build"),
+            profile: BuildType::default(),
             cmake_options: Vec::default(),
             name: String::default(),
         }
@@ -40,45 +45,31 @@ impl Config {
         }
     }
 
+    pub fn get_config(project: &std::path::Path) -> anyhow::Result<Option<Self>> {
+        let config = project.join(CONFIG_FILE);
+
+        let contents = match fs::read_to_string(config) {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e).context("failed to read .cppx.json"),
+        };
+
+        match serde_json::from_str(&contents) {
+            Ok(config) => Ok(Some(config)),
+            Err(e) => {
+                Err(e).context("failed to parse .cppx.json")
+            }
+        }
+    }
+
     // write it as a json file
-    #[allow(unused)]
     pub fn make_config(self, project: &std::path::Path) -> anyhow::Result<()> {
         anyhow::ensure!(project.is_dir(), "{project:?} doesn't exist");
 
         let json = serde_json::to_string_pretty(&self)?;
-        let file = project.join(".cppx.json");
+        let file = project.join(CONFIG_FILE);
 
         std::fs::write(file, json)?;
         Ok(())
-    }
-
-    #[allow(unused)]
-    pub fn set_name(&mut self, name: String) {
-        self.name = name;
-    }
-
-    #[allow(unused)]
-    pub fn set_generator(&mut self, generator: Generator) {
-        self.generator = Some(generator);
-    }
-
-    #[allow(unused)]
-    pub fn set_jobs(&mut self, jobs: u32) {
-        self.jobs = jobs;
-    }
-
-    #[allow(unused)]
-    pub fn set_build_dir(&mut self, build_dir: String) {
-        self.build_dir = build_dir;
-    }
-
-    #[allow(unused)]
-    pub fn set_build_type(&mut self, build_type: BuildType) {
-        self.build_type = build_type;
-    }
-
-    #[allow(unused)]
-    pub fn set_cmake_options(&mut self, cmake_options: Vec<String>) {
-        self.cmake_options = cmake_options;
     }
 }

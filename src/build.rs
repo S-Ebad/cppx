@@ -1,20 +1,22 @@
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::{fs, num::NonZeroU16, path::PathBuf, process::Command};
+use std::{borrow::Cow, fs, num::NonZeroU16, path::PathBuf, process::Command};
+
+use crate::config::Config;
 
 #[derive(clap::Args)]
 pub struct Build {
     #[arg(short, long)]
     project: Option<PathBuf>,
 
-    #[arg(long, default_value="debug")]
-    profile: BuildType,
+    #[arg(long)]
+    profile: Option<BuildType>,
 
     #[arg(long)]
     run: bool,
 
-    #[arg(short, long, default_value_t=NonZeroU16::MIN)]
-    jobs: NonZeroU16,
+    #[arg(short, long)]
+    jobs: Option<NonZeroU16>,
 
     #[arg(long, conflicts_with = "jobs")]
     parallel: bool,
@@ -58,6 +60,15 @@ impl Generator {
             Generator::Makefile => "Unix Makefiles",
             Generator::Ninja => "Ninja",
             Generator::VisualStudio => "Visual Studio 17 2022",
+        }
+    }
+}
+
+impl BuildType {
+    fn as_str(self) -> &'static str {
+        match self {
+            BuildType::Release => "Release",
+            BuildType::Debug => "Debug",
         }
     }
 }
@@ -107,34 +118,8 @@ fn symlink_compile_commands(build_dir: &std::path::Path) -> anyhow::Result<()> {
 }
 
 impl Build {
-    pub fn build_project(self) -> anyhow::Result<()> {
-        let Build {
-            project,
-            profile,
-            run,
-            jobs,
-            parallel,
-            generator,
-            clean_first,
-            mut cmake_options,
-            build_args,
-            config_args,
-            extra_args,
-        }: Build = self;
-
-        let max_jobs = std::thread::available_parallelism()
-            .map(|n| n.get() as u16)
-            .unwrap_or_else(|_| {
-                eprintln!("warning: could not detect available parallelism, defaulting to 1");
-                1
-            });
-
-        let jobs = if parallel {
-            max_jobs
-        } else {
-            jobs.get().min(max_jobs)
-        };
-        let project = project.map_or_else(
+    pub fn build_project(mut self) -> anyhow::Result<()> {
+        let project = self.project.map_or_else(
             || {
                 let cwd = std::env::current_dir().context("failed to get current directory")?;
 
@@ -147,17 +132,54 @@ impl Build {
             },
         )?;
 
-        let profile_str = if profile == BuildType::Release {
-            "Release"
-        } else {
-            "Debug"
-        };
+        let jobs: u16;
+        let build_dir_rel: std::path::PathBuf;
+        let filename: std::borrow::Cow<str>;
 
-        // pre-defined cmake options here
-        cmake_options.push(format!("CMAKE_BUILD_TYPE={}", profile_str));
+        {
+            let mut config = Config::get_config(&project)?.unwrap_or_default();
+            let max_jobs = std::thread::available_parallelism()
+                .map(|n| n.get() as u16)
+                .unwrap_or_else(|_| {
+                    eprintln!("warning: could not detect available parallelism, defaulting to 1");
+                    1
+                });
+
+            jobs = if self.parallel {
+                max_jobs
+            } else {
+                self.jobs.map(NonZeroU16::get).unwrap_or(config.jobs)
+            };
+
+            let profile_str = match self.profile {
+                Some(x) => x.as_str(),
+                None => config.profile.as_str(),
+            };
+
+            build_dir_rel = config.build_dir.join(profile_str);
+            filename = if config.name.is_empty() {
+                Cow::Borrowed(
+                    project
+                        .file_name()
+                        .context("project path has no file name")?
+                        .to_str()
+                        .context("failed to get executable filename")?,
+                )
+            } else {
+                Cow::Owned(config.name)
+            };
+
+            self.generator = self.generator.or(config.generator);
+
+            config.cmake_options.extend(self.cmake_options);
+            config
+                .cmake_options
+                .push(format!("CMAKE_BUILD_TYPE={}", profile_str));
+
+            self.cmake_options = config.cmake_options;
+        }
 
         // relative
-        let build_dir_rel = PathBuf::from("build").join(profile_str);
         let build_dir = project.join(&build_dir_rel);
 
         // generate project if it isn't generated already
@@ -165,13 +187,18 @@ impl Build {
             let status = Command::new("cmake")
                 .arg("-B")
                 .arg(&build_dir_rel)
-                .args(generator.map(|g| ["-G", g.as_str()]).into_iter().flatten())
                 .args(
-                    cmake_options
+                    self.generator
+                        .map(|g| ["-G", g.as_str()])
+                        .into_iter()
+                        .flatten(),
+                )
+                .args(
+                    self.cmake_options
                         .into_iter()
                         .flat_map(|opt| ["-D".to_string(), opt]),
                 )
-                .args(config_args)
+                .args(self.config_args)
                 .current_dir(&project)
                 .status()
                 .context("failed to run cmake")?;
@@ -184,8 +211,8 @@ impl Build {
             .arg(build_dir_rel)
             .arg("-j")
             .arg(jobs.to_string())
-            .args(build_args)
-            .args(clean_first.then_some("--clean-first"))
+            .args(self.build_args)
+            .args(self.clean_first.then_some("--clean-first"))
             .current_dir(&project)
             .status()
             .context("failed to run cmake")?;
@@ -193,13 +220,8 @@ impl Build {
         anyhow::ensure!(status.success(), "cmake build failed with {}", status);
         symlink_compile_commands(&build_dir)?;
 
-        if run {
-            let filename = project
-                .file_name()
-                .context("project path has no file name")?
-                .to_str()
-                .context("failed to get executable filename")?;
-
+        if self.run {
+            let filename: &str = &filename;
             let exe_path = build_dir.join(filename);
 
             #[cfg(windows)]
@@ -211,7 +233,7 @@ impl Build {
             );
 
             let status = Command::new(&exe_path)
-                .args(&extra_args)
+                .args(&self.extra_args)
                 .status()
                 .with_context(|| format!("failed to run {exe_path:?}"))?;
 
