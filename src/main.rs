@@ -35,21 +35,21 @@ fn main() {
         Commands::New(new) => match new.make_project() {
             Ok(()) => (),
             Err(err) => {
-                eprintln!("new error: {}", err);
+                eprintln!("new error: {:?}", err);
                 std::process::exit(1);
             }
         },
         Commands::Build(build) => match build.build_project() {
             Ok(()) => (),
             Err(err) => {
-                eprintln!("build error: {}", err);
+                eprintln!("build error: {:?}", err);
                 std::process::exit(1);
             }
         },
         Commands::Clean(clean) => match clean.clean_project() {
             Ok(()) => (),
             Err(err) => {
-                eprintln!("clean error: {}", err);
+                eprintln!("clean error: {:?}", err);
                 std::process::exit(1);
             }
         },
