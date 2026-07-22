@@ -334,8 +334,20 @@ impl New {
             project_name, lang, std, no_clangd, type_, compiler_bin
         );
 
-        let config = crate::config::Config::new(project_name);
-        config.make_config(&project)?;
+        {
+            let mut project_name = project_name;
+            let run_target = match type_ {
+                ProjectType::Header => {
+                    project_name.push_str("_test");
+                    Some(project_name)
+                }
+                ProjectType::Lib => None,
+                ProjectType::Exe => Some(project_name),
+            };
+
+            let config = crate::config::Config::new(run_target);
+            config.make_config(&project)?;
+        }
 
         Ok(())
     }

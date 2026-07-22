@@ -1,6 +1,6 @@
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, fs, num::NonZeroU16, path::PathBuf, process::Command};
+use std::{fs, num::NonZeroU16, path::PathBuf, process::Command};
 
 use crate::config::Config;
 
@@ -134,7 +134,7 @@ impl Build {
 
         let jobs: u16;
         let build_dir_rel: std::path::PathBuf;
-        let filename: std::borrow::Cow<str>;
+        let run_target: Option<String>;
 
         {
             let mut config = Config::get_config(&project)?.unwrap_or_default();
@@ -157,17 +157,7 @@ impl Build {
             };
 
             build_dir_rel = config.build_dir.join(profile_str);
-            filename = if config.name.is_empty() {
-                Cow::Borrowed(
-                    project
-                        .file_name()
-                        .context("project path has no file name")?
-                        .to_str()
-                        .context("failed to get executable filename")?,
-                )
-            } else {
-                Cow::Owned(config.name)
-            };
+            run_target = config.run_target;
 
             self.generator = self.generator.or(config.generator);
 
@@ -221,7 +211,7 @@ impl Build {
         symlink_compile_commands(&build_dir)?;
 
         if self.run {
-            let filename: &str = &filename;
+            let filename = run_target.ok_or_else(|| anyhow::anyhow!("This project has no run target. Consider giving it a run target in .cppx.json"))?;
             let exe_path = build_dir.join(filename);
 
             #[cfg(windows)]

@@ -8,7 +8,8 @@ const CONFIG_FILE: &str = ".cppx.json";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
-    pub name: String,
+    #[serde(rename = "run-target")]
+    pub run_target: Option<String>,
 
     pub generator: Option<Generator>,
 
@@ -32,15 +33,15 @@ impl Default for Config {
             build_dir: std::path::PathBuf::from("build"),
             profile: BuildType::default(),
             cmake_options: Vec::default(),
-            name: String::default(),
+            run_target: None,
         }
     }
 }
 
 impl Config {
-    pub fn new(name: String) -> Self {
+    pub fn new(run_target: Option<String>) -> Self {
         Self {
-            name,
+            run_target,
             ..Default::default()
         }
     }
@@ -56,9 +57,7 @@ impl Config {
 
         match serde_json::from_str(&contents) {
             Ok(config) => Ok(Some(config)),
-            Err(e) => {
-                Err(e).context("failed to parse .cppx.json")
-            }
+            Err(e) => Err(e).context("failed to parse .cppx.json"),
         }
     }
 
