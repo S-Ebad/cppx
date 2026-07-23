@@ -41,13 +41,13 @@ cppx new mylib --type library --lang c
 cppx new mylib --type header-only
 ```
 
-- `exe` and `library` projects get a `src/` directory with a generated main source file, and a matching executable- or library-oriented `CMakeLists.txt`.
-- `header-only` projects put the library code in `include/main.hpp` (or `main.h` for C). A scratch `main.cpp`/`main.c` is also generated at the project root for testing the header. It's added to `.gitignore` so it's never committed, and `CMakeLists.txt` only builds a `<name>_test` executable from it if that file happens to be present.
-- `library` projects generate stub code with no `main` symbol, so they can be linked into an executable without colliding.
+- `exe` projects get a `src/` directory with a generated main source file, and an executable-oriented `CMakeLists.txt`. This is the runnable target.
+- `library` projects generate stub code with no `main` symbol, so the library can be linked into an executable without colliding. There's nothing to run here.
+- `header-only` projects put the library code in `include/main.hpp` (or `main.h` for C). A scratch source file is also generated at the project root purely to sanity-test the header, but it's gitignored and never committed. `CMakeLists.txt` only builds a runnable test executable from it if that file happens to be present, so cloning the repo elsewhere won't break the build even without the scratch file.
 
 Project/executable names are sanitized separately for use as C/C++ identifiers (namespaces, function prefixes, header guards). The raw name is still used for the CMake project name and directory.
 
-Either way, `git init` is run automatically in the new directory, and a `.cppx.json` is written with the resolved settings.
+Either way, `git init` is run automatically in the new directory, and a `.cppx.json` is written with the resolved settings, including which target (if any) is runnable.
 
 ---
 
@@ -65,7 +65,9 @@ Or specify a project explicitly:
 cppx build --project path/to/project
 ```
 
-Build output goes to `<build-dir>/Debug` or `<build-dir>/Release` (`build-dir` configurable via `.cppx.json`, default `build`). On first build, cppx runs `cmake -B` to configure; subsequent builds skip configuration if a cache already exists. A `compile_commands.json` symlink is created at the project root for editor tooling (not supported on Windows).
+Build output goes under a configurable build directory, split into a debug/release subdirectory. On first build, cppx runs `cmake -B` to configure; subsequent builds skip configuration if a cache already exists. A `compile_commands.json` symlink is created at the project root for editor tooling (not supported on Windows).
+
+`--run` builds and then runs the project's configured target. Library projects, and header-only projects with no scratch test file present, have nothing to run — cppx will tell you so rather than guessing.
 
 Examples:
 
@@ -88,13 +90,15 @@ cppx clean
 cppx clean --project path/to/project
 ```
 
-Removes the build directory (respects `build-dir` from `.cppx.json` if present). Fails if there isn't one.
+Removes the build directory. Fails if there isn't one.
 
 ---
 
 ### Project configuration (`.cppx.json`)
 
 Every project created with `cppx new` gets a `.cppx.json` file. `cppx build` and `cppx clean` read it automatically; CLI flags always take priority over it, and hardcoded defaults are used for anything neither specifies.
+
+Among other settings, it stores which CMake target (if any) is the runnable one for `--run` to build and execute — set automatically at project creation, but safe to edit by hand if you rename or restructure targets in `CMakeLists.txt` yourself, since cppx never tries to guess this from the CMake files.
 
 There's currently no CLI for editing `.cppx.json`. It's a plain JSON file, edit it directly. To remove config entirely, delete the file.
 
