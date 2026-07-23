@@ -25,6 +25,9 @@ pub struct Build {
     generator: Option<Generator>,
 
     #[arg(long)]
+    run_target: Option<String>,
+
+    #[arg(long)]
     clean_first: bool,
 
     #[arg(short = 'D')]
@@ -157,7 +160,7 @@ impl Build {
             };
 
             build_dir_rel = config.build_dir.join(profile_str);
-            run_target = config.run_target;
+            run_target = self.run_target.or(config.run_target);
 
             self.generator = self.generator.or(config.generator);
 
@@ -211,8 +214,8 @@ impl Build {
         symlink_compile_commands(&build_dir)?;
 
         if self.run {
-            let filename = run_target.ok_or_else(|| anyhow::anyhow!("This project has no run target. Consider giving it a run target in .cppx.json"))?;
-            let exe_path = build_dir.join(filename);
+            let target_name = run_target.ok_or_else(|| anyhow::anyhow!("this project has no run target, set one in .cppx.json"))?;
+            let exe_path = build_dir.join(target_name);
 
             #[cfg(windows)]
             let exe_path = exe_path.with_extension("exe");
