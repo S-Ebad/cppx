@@ -15,6 +15,9 @@ pub struct Build {
     #[arg(long)]
     run: bool,
 
+    #[arg(long)]
+    reconfigure: bool,
+
     #[arg(short, long)]
     jobs: Option<NonZeroU16>,
 
@@ -176,7 +179,7 @@ impl Build {
         let build_dir = project.join(&build_dir_rel);
 
         // generate project if it isn't generated already
-        if !build_dir.join("CMakeCache.txt").exists() {
+        if !build_dir.join("CMakeCache.txt").exists() || self.reconfigure {
             let status = Command::new("cmake")
                 .arg("-B")
                 .arg(&build_dir_rel)
