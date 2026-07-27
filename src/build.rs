@@ -13,9 +13,6 @@ pub struct Build {
     profile: Option<BuildType>,
 
     #[arg(long)]
-    run: bool,
-
-    #[arg(long)]
     reconfigure: bool,
 
     #[arg(short, long)]
@@ -28,9 +25,6 @@ pub struct Build {
     generator: Option<Generator>,
 
     #[arg(long)]
-    run_target: Option<String>,
-
-    #[arg(long)]
     clean_first: bool,
 
     #[arg(short = 'D')]
@@ -41,9 +35,6 @@ pub struct Build {
 
     #[arg(long)]
     config_args: Vec<String>,
-
-    #[arg(last = true, requires = "run")]
-    extra_args: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -133,7 +124,7 @@ fn symlink_compile_commands(
 }
 
 impl Build {
-    pub fn build_project(mut self) -> anyhow::Result<()> {
+    pub fn build_project(mut self) -> anyhow::Result<(PathBuf, Option<String>)> {
         let project = self.project.map_or_else(
             || {
                 let cwd = std::env::current_dir().context("failed to get current directory")?;
@@ -173,8 +164,9 @@ impl Build {
             };
 
             build_dir_rel = config.build_dir.join(profile_str);
+
             build = config.build_dir;
-            run_target = self.run_target.or(config.run_target);
+            run_target = config.run_target;
 
             self.generator = self.generator.or(config.generator);
 
@@ -232,28 +224,6 @@ impl Build {
             symlink_compile_commands(src, dst)?;
         }
 
-        if self.run {
-            let target_name = run_target.ok_or_else(|| {
-                anyhow::anyhow!("this project has no run target, set one in .cppx.json")
-            })?;
-            let exe_path = build_dir.join(target_name);
-
-            #[cfg(windows)]
-            let exe_path = exe_path.with_extension("exe");
-
-            anyhow::ensure!(
-                exe_path.is_file(),
-                "expected executable at {exe_path:?}, but it wasn't found"
-            );
-
-            let status = Command::new(&exe_path)
-                .args(&self.extra_args)
-                .status()
-                .with_context(|| format!("failed to run {exe_path:?}"))?;
-
-            anyhow::ensure!(status.success(), "program exited with {status}");
-        }
-
-        Ok(())
+        Ok((build_dir, run_target))
     }
 }
