@@ -108,19 +108,28 @@ fn symlink(_: &std::path::Path, _: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn symlink_compile_commands(build_dir: &std::path::Path) -> anyhow::Result<()> {
-    let src = build_dir.join("compile_commands.json");
-    let dst = build_dir.join("../compile_commands.json");
+fn symlink_compile_commands(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> anyhow::Result<()> {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
 
     if !src.is_file() {
         return Ok(());
     }
 
     if dst.symlink_metadata().is_ok() {
-        fs::remove_file(&dst).with_context(|| format!("failed to delete {dst:?}"))?;
+        fs::remove_file(dst).with_context(|| format!("failed to delete {dst:?}"))?;
     }
 
-    symlink(&src, &dst).context("failed to create symlink")
+    let parent = dst
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("destination has no parent"))?;
+    let relative = pathdiff::diff_paths(src, parent)
+        .ok_or_else(|| anyhow::anyhow!("failed to compute relative path"))?;
+
+    symlink(&relative, dst).context("failed to create symlink")
 }
 
 impl Build {
@@ -141,6 +150,7 @@ impl Build {
         let jobs: u16;
         let build_dir_rel: std::path::PathBuf;
         let run_target: Option<String>;
+        let build: PathBuf;
 
         {
             let mut config = Config::get_config(&project)?.unwrap_or_default();
@@ -163,6 +173,7 @@ impl Build {
             };
 
             build_dir_rel = config.build_dir.join(profile_str);
+            build = config.build_dir;
             run_target = self.run_target.or(config.run_target);
 
             self.generator = self.generator.or(config.generator);
@@ -204,7 +215,7 @@ impl Build {
 
         let status = Command::new("cmake")
             .arg("--build")
-            .arg(build_dir_rel)
+            .arg(&build_dir_rel)
             .arg("-j")
             .arg(jobs.to_string())
             .args(self.build_args)
@@ -214,10 +225,17 @@ impl Build {
             .context("failed to run cmake")?;
 
         anyhow::ensure!(status.success(), "cmake build failed with {}", status);
-        symlink_compile_commands(&build_dir)?;
+        {
+            let src = build_dir_rel.join("compile_commands.json");
+            let dst = build.join("compile_commands.json");
+
+            symlink_compile_commands(src, dst)?;
+        }
 
         if self.run {
-            let target_name = run_target.ok_or_else(|| anyhow::anyhow!("this project has no run target, set one in .cppx.json"))?;
+            let target_name = run_target.ok_or_else(|| {
+                anyhow::anyhow!("this project has no run target, set one in .cppx.json")
+            })?;
             let exe_path = build_dir.join(target_name);
 
             #[cfg(windows)]
