@@ -211,8 +211,7 @@ impl New {
             type_,
         } = self;
 
-        anyhow::ensure!(!project.is_dir(), "project {project:?} already exists");
-        fs::create_dir(&project)?;
+        anyhow::ensure!(!project.exists(), "project {project:?} already exists");
 
         let (std, lang) = match (std, lang) {
             (None, None) => (Std::Cpp23, Lang::Cpp),
@@ -254,6 +253,9 @@ impl New {
             ("LANG_EXT".to_string(), lang.get_ext().to_string()),
             ("COMPILER".into(), compiler_bin.to_string()),
         ];
+
+        // everything above can fail on bad input, so only touch the disk now
+        fs::create_dir_all(&project)?;
 
         if !no_clangd {
             let clangd = project.join(".clangd");
