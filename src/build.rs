@@ -225,8 +225,8 @@ impl Build {
             .arg(&build_dir_rel)
             .arg("-j")
             .arg(jobs.to_string())
-            .args(self.build_args)
             .args(self.clean_first.then_some("--clean-first"))
+            .args(self.build_args)
             .current_dir(&project)
             .status()
             .context("failed to run cmake")?;
