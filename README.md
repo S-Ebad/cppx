@@ -13,12 +13,12 @@ Projects created with cppx remain normal CMake projects and can be built without
 - Generate C/C++ projects: executable, static library, or header-only
 - Optional `.clangd` config generation
 - Build projects through CMake, with debug/release output directories
-- Run the built executable, optionally passing extra args through
+- Build and run the project's executable with `cppx run`, optionally passing extra args through
 - Clean build artifacts
-- Automatic project discovery (walks upward to find `CMakeLists.txt`)
+- Automatic project discovery (walks upward, preferring the directory with `.cppx.json`, then the nearest `CMakeLists.txt`)
 - Persistent per-project settings via `.cppx.json`, merged with CLI flags (`CLI > config > default`)
 - Choose a CMake generator (Ninja, Unix Makefiles, Visual Studio)
-- Parallel builds, with automatic core detection
+- Parallel builds (`-j N`, or `--parallel` to use every core; the default is 1 job)
 - Pass CMake cache variables (`-D`) and raw passthrough args to both the configure and build steps
 
 ## Usage
@@ -65,18 +65,39 @@ Or specify a project explicitly:
 cppx build --project path/to/project
 ```
 
-Build output goes under a configurable build directory, split into a debug/release subdirectory. On first build, cppx runs `cmake -B` to configure; subsequent builds skip configuration if a cache already exists. A `compile_commands.json` symlink is created at the project root for editor tooling (not supported on Windows).
+Build output goes under a configurable build directory, split into a `Debug`/`Release` subdirectory. On first build, cppx runs `cmake -B` to configure; subsequent builds skip configuration if a cache already exists.
 
-`--run` builds and then runs the project's configured target. Library projects, and header-only projects with no scratch test file present, have nothing to run — cppx will tell you so rather than guessing.
+Because of that, `-G`, `-D` and `--config-args` only take effect when configuring. If the project is already configured, cppx warns that they were ignored. Pass `--reconfigure` to apply them. CMake refuses to change generators on an existing cache, so to switch generators run `cppx clean` first.
+
+A `compile_commands.json` symlink is created in the build directory itself (`build/compile_commands.json`, pointing into the active profile) for editor tooling (not supported on Windows). It deliberately isn't placed in the project root: the file contains absolute paths, so keeping it in the gitignored build directory stops it from being committed. clangd looks in `build/` but not in `build/Debug` or `build/Release`, hence the symlink.
+
+Extra arguments can be passed straight to CMake with `--config-args` (configure step) and `--build-args` (build step). Use the `=` form for values starting with a dash, e.g. `--build-args=-v`.
 
 Examples:
 
 ```bash
 cppx build --parallel
-cppx build --profile release --run
-cppx build --run -- --some-flag
-cppx build -D CMAKE_EXPORT_COMPILE_COMMANDS=ON
+cppx build --profile release -j 8
+cppx build -D CMAKE_EXPORT_COMPILE_COMMANDS=ON --reconfigure
+cppx build --clean-first
+cppx build --build-args=--verbose
 ```
+
+---
+
+### Run a project
+
+```bash
+cppx run
+```
+
+`cppx run` builds (accepting every `build` flag) and then runs the project's configured target. Arguments after `--` go to your program, and its exit code becomes cppx's exit code:
+
+```bash
+cppx run --profile release -- --some-flag
+```
+
+Library projects, and header-only projects with no scratch test file present, have nothing to run. cppx will tell you so rather than guessing.
 
 ---
 
@@ -96,7 +117,7 @@ Removes the build directory. Fails if there isn't one.
 
 ### Project configuration (`.cppx.json`)
 
-Every project created with `cppx new` gets a `.cppx.json` file. `cppx build` and `cppx clean` read it automatically; CLI flags always take priority over it, and hardcoded defaults are used for anything neither specifies.
+Every project created with `cppx new` gets a `.cppx.json` file. `cppx build`, `cppx run` and `cppx clean` read it automatically; CLI flags always take priority over it, and hardcoded defaults are used for anything neither specifies. A partial file is fine, so you only need to list the keys you want to change.
 
 Among other settings, it stores which CMake target (if any) is the runnable one for `--run` to build and execute — set automatically at project creation, but safe to edit by hand if you rename or restructure targets in `CMakeLists.txt` yourself, since cppx never tries to guess this from the CMake files.
 
@@ -108,7 +129,6 @@ cppx generates the initial project structure, but after that the generated `CMak
 
 ## Planned Features
 
-- `cppx run`, splitting `build --run` into its own subcommand (build-then-run, cargo-style)
 - `cppx config` (`--show`, `--set`, `--get`, `--unset`, `reset`) not yet decided whether this is worth it over editing `.cppx.json` directly
 - Configurable Visual Studio generator version (currently hardcoded)
 
