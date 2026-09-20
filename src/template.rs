@@ -7,7 +7,7 @@ CompileFlags:
 "#;
 
 pub const CMAKE_EXE: &str = r#"
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION {CMAKE_MIN})
 set(CMAKE_{LANG}_STANDARD {STD_NUM})
 set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
 set(CMAKE_{LANG}_EXTENSIONS OFF)
@@ -36,7 +36,7 @@ endif()
 "#;
 
 pub const CMAKE_HEADER: &str = r#"
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION {CMAKE_MIN})
 set(CMAKE_{LANG}_STANDARD {STD_NUM})
 set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
 set(CMAKE_{LANG}_EXTENSIONS OFF)
@@ -65,7 +65,7 @@ endif()
 "#;
 
 pub const CMAKE_LIB: &str = r#"
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION {CMAKE_MIN})
 set(CMAKE_{LANG}_STANDARD {STD_NUM})
 set(CMAKE_{LANG}_STANDARD_REQUIRED ON)
 set(CMAKE_{LANG}_EXTENSIONS OFF)

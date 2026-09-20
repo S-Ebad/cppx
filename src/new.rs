@@ -106,10 +106,21 @@ impl Std {
             Std::Cpp23 => "23",
             Std::Cpp26 => "26",
 
-            Std::C89 => "89",
+            // CMake spells C89 as 90
+            Std::C89 => "90",
             Std::C11 => "11",
             Std::C17 => "17",
             Std::C23 => "23",
+        }
+    }
+
+    /// Oldest CMake that knows this standard.
+    fn cmake_min(&self) -> &'static str {
+        match self {
+            Std::Cpp11 | Std::Cpp17 | Std::Cpp20 | Std::C89 | Std::C11 => "3.16",
+            Std::Cpp23 => "3.20",
+            Std::C17 | Std::C23 => "3.21",
+            Std::Cpp26 => "3.25",
         }
     }
 }
@@ -249,6 +260,7 @@ impl New {
             ("PROJECT_IDENT".to_string(), project_ident),
             ("STD".to_string(), std.to_string()),
             ("STD_NUM".to_string(), std.get_std_num().to_string()),
+            ("CMAKE_MIN".to_string(), std.cmake_min().to_string()),
             ("LANG".to_string(), lang.to_string()),
             ("LANG_EXT".to_string(), lang.get_ext().to_string()),
             ("COMPILER".into(), compiler_bin.to_string()),
