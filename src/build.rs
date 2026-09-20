@@ -147,6 +147,7 @@ impl Build {
         let build_dir_rel: std::path::PathBuf;
         let run_target: Option<String>;
         let build: PathBuf;
+        let configure_flags_given: bool;
 
         {
             let mut config = Config::get_config(&project)?.unwrap_or_default();
@@ -172,6 +173,10 @@ impl Build {
 
             build = config.build_dir;
             run_target = config.run_target;
+
+            configure_flags_given = self.generator.is_some()
+                || !self.cmake_options.is_empty()
+                || !self.config_args.is_empty();
 
             self.generator = self.generator.or(config.generator);
 
@@ -208,6 +213,11 @@ impl Build {
                 .context("failed to run cmake")?;
 
             anyhow::ensure!(status.success(), "cmake configure failed with {}", status);
+        } else if configure_flags_given {
+            eprintln!(
+                "warning: {} is already configured, so -G, -D and --config-args were ignored (pass --reconfigure to apply them)",
+                build_dir_rel.display()
+            );
         }
 
         let status = Command::new("cmake")
