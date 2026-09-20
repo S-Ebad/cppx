@@ -4,7 +4,7 @@ use std::fs;
 
 use crate::build::{BuildType, Generator};
 
-const CONFIG_FILE: &str = ".cppx.json";
+pub const CONFIG_FILE: &str = ".cppx.json";
 
 // missing fields fall back to Default, so a hand-written config can be partial
 #[derive(Serialize, Deserialize, Debug)]

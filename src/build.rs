@@ -2,7 +2,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::{fs, num::NonZeroU16, path::PathBuf, process::Command};
 
-use crate::config::Config;
+use crate::config::{CONFIG_FILE, Config};
 
 #[derive(clap::Args)]
 pub struct Build {
@@ -72,10 +72,15 @@ impl BuildType {
 
 pub fn find_project(base_path: &std::path::Path) -> Option<PathBuf> {
     let resolved_path = fs::canonicalize(base_path).ok()?;
+    let has_cmake = |dir: &&std::path::Path| dir.join("CMakeLists.txt").is_file();
 
+    // a .cppx.json marks the real root, even when a subdirectory (add_subdirectory)
+    // has a CMakeLists.txt of its own
     resolved_path
         .ancestors()
-        .find(|dir| dir.join("CMakeLists.txt").is_file())
+        .filter(has_cmake)
+        .find(|dir| dir.join(CONFIG_FILE).is_file())
+        .or_else(|| resolved_path.ancestors().find(has_cmake))
         .map(|dir| dir.to_path_buf())
 }
 
