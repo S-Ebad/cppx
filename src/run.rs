@@ -19,8 +19,14 @@ impl Run {
 
         let exe_path = build_dir.join(target_name);
 
+        // a target named "my.app" would lose ".app"
         #[cfg(windows)]
-        let exe_path = exe_path.with_extension("exe");
+        let exe_path = {
+            let mut os = exe_path.into_os_string();
+            os.push(".exe");
+
+            std::path::PathBuf::from(os)
+        };
 
         anyhow::ensure!(
             exe_path.is_file(),
@@ -32,7 +38,11 @@ impl Run {
             .status()
             .with_context(|| format!("failed to run {exe_path:?}"))?;
 
-        anyhow::ensure!(status.success(), "program exited with {status}");
+        if !status.success() {
+            // hand the program's own exit code back to the shell
+            std::process::exit(status.code().unwrap_or(1));
+        }
+
         Ok(())
     }
 }
