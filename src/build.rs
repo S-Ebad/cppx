@@ -218,8 +218,8 @@ impl Build {
 
         anyhow::ensure!(status.success(), "cmake build failed with {}", status);
         {
-            let src = build_dir_rel.join("compile_commands.json");
-            let dst = build.join("compile_commands.json");
+            let src = build_dir.join("compile_commands.json");
+            let dst = project.join(&build).join("compile_commands.json");
 
             symlink_compile_commands(src, dst)?;
         }
