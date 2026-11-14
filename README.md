@@ -47,6 +47,8 @@ cppx new mylib --type header-only
 
 Project/executable names are sanitized separately for use as C/C++ identifiers (namespaces, function prefixes, header guards). The raw name is still used for the CMake project name and directory.
 
+`--compiler gcc|clang` picks the compiler. It's stored in `.cppx.json` (as a `cmake-options` entry) rather than in `CMakeLists.txt`, so the project still builds with any toolchain and can be pulled into another project with `add_subdirectory`. Without it, CMake chooses as usual (honouring `CC`/`CXX`).
+
 Either way, `git init` is run automatically in the new directory, and a `.cppx.json` is written with the resolved settings, including which target (if any) is runnable.
 
 ---
