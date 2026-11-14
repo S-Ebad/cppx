@@ -119,25 +119,28 @@ Removes the build directory. Fails if there isn't one.
 
 ### Project configuration (`.cppx.json`)
 
-Every project created with `cppx new` gets a `.cppx.json` file. `cppx build`, `cppx run` and `cppx clean` read it automatically; CLI flags always take priority over it, and hardcoded defaults are used for anything neither specifies. A partial file is fine, so you only need to list the keys you want to change.
+Configuration is done by editing `.cppx.json` directly. There's no `cppx config` command. `cppx new` writes one with the resolved settings, and `cppx build`, `cppx run` and `cppx clean` read it automatically. CLI flags always take priority over it, and defaults are used for anything neither specifies. A partial file is fine, so you only need to list the keys you want to change. To remove config entirely, delete the file.
 
-Among other settings, it stores which CMake target (if any) is the runnable one for `--run` to build and execute — set automatically at project creation, but safe to edit by hand if you rename or restructure targets in `CMakeLists.txt` yourself, since cppx never tries to guess this from the CMake files.
+```json
+{
+  "run-target": "hello",
+  "generator": "Ninja",
+  "jobs": 4,
+  "build-dir": "build",
+  "build-type": "Release",
+  "cmake-options": ["CMAKE_CXX_COMPILER=clang++"]
+}
+```
 
-There's currently no CLI for editing `.cppx.json`. It's a plain JSON file, edit it directly. To remove config entirely, delete the file.
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `run-target` | `null` | CMake target that `cppx run` builds and executes. `null` means nothing to run. |
+| `generator` | `null` | `Makefile`, `Ninja` or `VisualStudio`. `null` lets CMake choose. |
+| `jobs` | `1` | Parallel build jobs. |
+| `build-dir` | `"build"` | Build directory, relative to the project root. |
+| `build-type` | `"Debug"` | `Debug` or `Release`. |
+| `cmake-options` | `[]` | Extra `-D` cache variables passed when configuring. |
 
-## Design Goals
+`run-target` is set automatically at project creation, but edit it if you rename or restructure targets in `CMakeLists.txt`, since cppx never tries to guess it from the CMake files.
 
-cppx generates the initial project structure, but after that the generated `CMakeLists.txt` remains fully user-controlled. cppx doesn't try to hide CMake from the developer, it just removes the repetitive setup.
-
-## Planned Features
-
-- `cppx config` (`--show`, `--set`, `--get`, `--unset`, `reset`) not yet decided whether this is worth it over editing `.cppx.json` directly
-- Configurable Visual Studio generator version (currently hardcoded)
-
-## Why?
-
-CMake is powerful, but many small projects repeat the same setup: creating folders, writing boilerplate CMake files, remembering build commands, passing the same CMake arguments repeatedly. cppx aims to make that quicker without hiding CMake from you.
-
-## Status
-
-Early development.
+Changes to `generator` and `cmake-options` only apply when CMake configures, so run `cppx build --reconfigure` (or `cppx clean` for a generator change) afterwards.
