@@ -1,4 +1,5 @@
 use anyhow::Context;
+use std::path::{Path, PathBuf};
 
 #[derive(clap::Args)]
 pub struct Run {
@@ -11,27 +12,17 @@ pub struct Run {
 
 impl Run {
     pub fn run_project(self) -> anyhow::Result<()> {
-        let (build_dir, run_target) = self.build.build_project()?;
+        let crate::build::BuildOutput {
+            build_dir,
+            profile,
+            run_target,
+        } = self.build.build_project()?;
 
         let target_name = run_target.ok_or_else(|| {
             anyhow::anyhow!("this project has no run target, set one in .cppx.json")
         })?;
 
-        let exe_path = build_dir.join(target_name);
-
-        // a target named "my.app" would lose ".app"
-        #[cfg(windows)]
-        let exe_path = {
-            let mut os = exe_path.into_os_string();
-            os.push(".exe");
-
-            std::path::PathBuf::from(os)
-        };
-
-        anyhow::ensure!(
-            exe_path.is_file(),
-            "expected executable at {exe_path:?}, but it wasn't found"
-        );
+        let exe_path = find_executable(&build_dir, profile.as_str(), &target_name)?;
 
         let status = std::process::Command::new(&exe_path)
             .args(&self.extra_args)
@@ -44,5 +35,33 @@ impl Run {
         }
 
         Ok(())
+    }
+}
+
+/// Single-config generators put the binary in the build dir itself, multi-config
+/// ones (Visual Studio, Ninja Multi-Config) nest it in a per-config subdirectory.
+fn find_executable(build_dir: &Path, profile: &str, target: &str) -> anyhow::Result<PathBuf> {
+    let candidates = [build_dir.join(target), build_dir.join(profile).join(target)];
+
+    candidates
+        .iter()
+        .map(|p| with_exe_suffix(p.clone()))
+        .find(|p| p.is_file())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "expected executable at {:?}, but it wasn't found",
+                with_exe_suffix(candidates[0].clone())
+            )
+        })
+}
+
+// a target named "my.app" would lose ".app" with set_extension, so push instead
+fn with_exe_suffix(path: PathBuf) -> PathBuf {
+    if cfg!(windows) {
+        let mut os = path.into_os_string();
+        os.push(".exe");
+        PathBuf::from(os)
+    } else {
+        path
     }
 }

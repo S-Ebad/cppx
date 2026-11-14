@@ -62,7 +62,7 @@ impl Generator {
 }
 
 impl BuildType {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             BuildType::Release => "Release",
             BuildType::Debug => "Debug",
@@ -128,8 +128,16 @@ fn symlink_compile_commands(
     symlink(&relative, dst).context("failed to create symlink")
 }
 
+/// What a finished build hands to `run`.
+pub struct BuildOutput {
+    /// `<build-dir>/<Profile>`, the CMake binary directory.
+    pub build_dir: PathBuf,
+    pub profile: BuildType,
+    pub run_target: Option<String>,
+}
+
 impl Build {
-    pub fn build_project(mut self) -> anyhow::Result<(PathBuf, Option<String>)> {
+    pub fn build_project(mut self) -> anyhow::Result<BuildOutput> {
         let project = self.project.map_or_else(
             || {
                 let cwd = std::env::current_dir().context("failed to get current directory")?;
@@ -144,6 +152,7 @@ impl Build {
         )?;
 
         let jobs: u16;
+        let profile: BuildType;
         let build_dir_rel: std::path::PathBuf;
         let run_target: Option<String>;
         let build: PathBuf;
@@ -164,10 +173,8 @@ impl Build {
                 self.jobs.map(NonZeroU16::get).unwrap_or(config.jobs)
             };
 
-            let profile_str = match self.profile {
-                Some(x) => x.as_str(),
-                None => config.profile.as_str(),
-            };
+            profile = self.profile.unwrap_or(config.profile);
+            let profile_str = profile.as_str();
 
             build_dir_rel = config.build_dir.join(profile_str);
 
@@ -225,6 +232,10 @@ impl Build {
             .arg(&build_dir_rel)
             .arg("-j")
             .arg(jobs.to_string())
+            // multi-config generators (Visual Studio, Ninja Multi-Config) ignore
+            // CMAKE_BUILD_TYPE and pick the config here; single-config ones ignore this
+            .arg("--config")
+            .arg(profile.as_str())
             .args(self.clean_first.then_some("--clean-first"))
             .args(self.build_args)
             .current_dir(&project)
@@ -239,6 +250,10 @@ impl Build {
             symlink_compile_commands(src, dst)?;
         }
 
-        Ok((build_dir, run_target))
+        Ok(BuildOutput {
+            build_dir,
+            profile,
+            run_target,
+        })
     }
 }
