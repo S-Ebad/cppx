@@ -19,8 +19,10 @@ pub struct New {
     #[arg(long, value_parser = parse_name)]
     name: Option<String>,
 
-    #[arg(long, default_value_t=Compiler::Gcc)]
-    compiler: Compiler,
+    /// Compiler to configure with; stored in .cppx.json, not CMakeLists.txt.
+    /// Without it, CMake picks one as usual (honouring CC/CXX).
+    #[arg(long)]
+    compiler: Option<Compiler>,
 
     #[arg(long, value_enum, ignore_case = true)]
     lang: Option<Lang>,
@@ -247,12 +249,12 @@ impl New {
 
         let project_ident = sanitize(&project_name);
 
-        let compiler_bin = match (compiler, lang) {
+        let compiler_bin = compiler.map(|compiler| match (compiler, lang) {
             (Compiler::Gcc, Lang::Cpp) => "g++",
             (Compiler::Gcc, Lang::C) => "gcc",
             (Compiler::Clang, Lang::Cpp) => "clang++",
             (Compiler::Clang, Lang::C) => "clang",
-        };
+        });
 
         let vars: std::collections::HashMap<String, String> = hashmap![
             ("PROJECT".to_string(), project_name.to_string()),
@@ -263,7 +265,6 @@ impl New {
             ("CMAKE_MIN".to_string(), std.cmake_min().to_string()),
             ("LANG".to_string(), lang.to_string()),
             ("LANG_EXT".to_string(), lang.get_ext().to_string()),
-            ("COMPILER".into(), compiler_bin.to_string()),
         ];
 
         // everything above can fail on bad input, so only touch the disk now
@@ -345,7 +346,12 @@ impl New {
 
         println!(
             "Created: {} (lang={}, std={}, no-clangd={:?}, type={:?}, compiler={})",
-            project_name, lang, std, no_clangd, type_, compiler_bin
+            project_name,
+            lang,
+            std,
+            no_clangd,
+            type_,
+            compiler_bin.unwrap_or("cmake default")
         );
 
         {
@@ -359,7 +365,14 @@ impl New {
                 ProjectType::Exe => Some(project_name),
             };
 
-            let config = crate::config::Config::new(run_target);
+            // kept out of CMakeLists.txt so the project still builds with any
+            // toolchain and can be nested via add_subdirectory
+            let cmake_options = compiler_bin
+                .map(|bin| format!("CMAKE_{lang}_COMPILER={bin}"))
+                .into_iter()
+                .collect();
+
+            let config = crate::config::Config::new(run_target, cmake_options);
             config.make_config(&project)?;
         }
 

@@ -41,9 +41,10 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn new(run_target: Option<String>) -> Self {
+    pub fn new(run_target: Option<String>, cmake_options: Vec<String>) -> Self {
         Self {
             run_target,
+            cmake_options,
             ..Default::default()
         }
     }
@@ -108,11 +109,12 @@ mod tests {
     #[test]
     fn round_trips_through_disk() {
         let dir = tempfile::tempdir().unwrap();
-        Config::new(Some("app".into()))
+        Config::new(Some("app".into()), vec!["CMAKE_C_COMPILER=gcc".into()])
             .make_config(dir.path())
             .unwrap();
 
         let config = Config::get_config(dir.path()).unwrap().unwrap();
         assert_eq!(config.run_target.as_deref(), Some("app"));
+        assert_eq!(config.cmake_options, ["CMAKE_C_COMPILER=gcc"]);
     }
 }

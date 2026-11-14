@@ -70,6 +70,32 @@ fn new_c_project_from_std() {
 }
 
 #[test]
+fn compiler_goes_to_config_not_cmakelists() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert_ok(&cppx(tmp.path(), &["new", "app", "--compiler", "clang"]));
+    let p = tmp.path().join("app");
+
+    let cmake = fs::read_to_string(p.join("CMakeLists.txt")).unwrap();
+    assert!(!cmake.contains("CMAKE_CXX_COMPILER "));
+
+    let config = fs::read_to_string(p.join(".cppx.json")).unwrap();
+    assert!(config.contains("CMAKE_CXX_COMPILER=clang++"));
+
+    assert_ok(&cppx(&p, &["build"]));
+    let cache = fs::read_to_string(p.join("build/Debug/CMakeCache.txt")).unwrap();
+    assert!(cache.contains("CMAKE_CXX_COMPILER_ID:INTERNAL=Clang") || cache.contains("clang++"));
+}
+
+#[test]
+fn no_compiler_flag_leaves_choice_to_cmake() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert_ok(&cppx(tmp.path(), &["new", "app"]));
+
+    let config = fs::read_to_string(tmp.path().join("app/.cppx.json")).unwrap();
+    assert!(!config.contains("COMPILER"));
+}
+
+#[test]
 fn new_rejects_mismatched_lang_and_std() {
     let tmp = tempfile::tempdir().unwrap();
     let out = cppx(tmp.path(), &["new", "bad", "--lang", "c", "--std", "c++20"]);
@@ -201,7 +227,7 @@ fn header_only_runs_scratch_test() {
 }
 
 #[test]
-fn header_only_adds_no_test_target_when_nested() {
+fn header_only_nests_without_test_target() {
     let tmp = tempfile::tempdir().unwrap();
     assert_ok(&cppx(tmp.path(), &["new", "parent"]));
     let parent = tmp.path().join("parent");
@@ -209,16 +235,6 @@ fn header_only_adds_no_test_target_when_nested() {
 
     // parent has its own main.cpp at the root, which the old guard picked up
     fs::write(parent.join("main.cpp"), "int main() {}\n").unwrap();
-
-    // a nested project can't re-set the compiler once the parent enabled the language
-    let hdr_cmake = parent.join("hdr/CMakeLists.txt");
-    let stripped: String = fs::read_to_string(&hdr_cmake)
-        .unwrap()
-        .lines()
-        .filter(|l| !l.contains("CMAKE_CXX_COMPILER "))
-        .map(|l| format!("{l}\n"))
-        .collect();
-    fs::write(&hdr_cmake, stripped).unwrap();
 
     let mut cmake = fs::read_to_string(parent.join("CMakeLists.txt")).unwrap();
     cmake.push_str("add_subdirectory(hdr)\n");
