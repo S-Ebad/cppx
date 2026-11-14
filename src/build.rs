@@ -257,3 +257,58 @@ impl Build {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn touch(path: &std::path::Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, "").unwrap();
+    }
+
+    #[test]
+    fn finds_nearest_cmakelists() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("CMakeLists.txt"));
+        fs::create_dir_all(dir.path().join("src/deep")).unwrap();
+
+        let found = find_project(&dir.path().join("src/deep")).unwrap();
+        assert_eq!(found, fs::canonicalize(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn prefers_directory_with_config_over_nested_cmakelists() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(&dir.path().join("CMakeLists.txt"));
+        touch(&dir.path().join(CONFIG_FILE));
+        touch(&dir.path().join("sub/CMakeLists.txt"));
+
+        let found = find_project(&dir.path().join("sub")).unwrap();
+        assert_eq!(found, fs::canonicalize(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn no_project_found() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(validate_project(dir.path()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_commands_symlink_is_relative() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("build/Debug/compile_commands.json");
+        let dst = dir.path().join("build/compile_commands.json");
+        touch(&src);
+
+        symlink_compile_commands(&src, &dst).unwrap();
+        assert_eq!(
+            fs::read_link(&dst).unwrap(),
+            PathBuf::from("Debug/compile_commands.json")
+        );
+
+        // re-linking over an existing link must work
+        symlink_compile_commands(&src, &dst).unwrap();
+    }
+}

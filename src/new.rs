@@ -380,3 +380,42 @@ impl New {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_makes_valid_identifiers() {
+        assert_eq!(sanitize("my-project"), "my_project");
+        assert_eq!(sanitize("hello.world!"), "helloworld");
+        assert_eq!(sanitize("2fast"), "_2fast");
+        assert_eq!(sanitize("already_ok"), "already_ok");
+    }
+
+    #[test]
+    fn std_and_lang_must_agree() {
+        assert!(New::validate(Std::Cpp20, Lang::Cpp).is_ok());
+        assert!(New::validate(Std::C11, Lang::C).is_ok());
+        assert!(New::validate(Std::C11, Lang::Cpp).is_err());
+        assert!(New::validate(Std::Cpp20, Lang::C).is_err());
+    }
+
+    #[test]
+    fn lang_is_inferred_from_std() {
+        assert_eq!(Lang::from_std(Std::Cpp17), Lang::Cpp);
+        assert_eq!(Lang::from_std(Std::C89), Lang::C);
+    }
+
+    #[test]
+    fn c89_is_spelled_90_for_cmake() {
+        assert_eq!(Std::C89.get_std_num(), "90");
+        assert_eq!(Std::Cpp23.get_std_num(), "23");
+    }
+
+    #[test]
+    fn empty_name_is_rejected() {
+        assert!(parse_name("").is_err());
+        assert_eq!(parse_name("x").unwrap(), "x");
+    }
+}

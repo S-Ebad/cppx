@@ -74,3 +74,45 @@ impl Config {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build::BuildType;
+
+    #[test]
+    fn missing_file_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(Config::get_config(dir.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn partial_file_falls_back_to_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(CONFIG_FILE), r#"{ "jobs": 4 }"#).unwrap();
+
+        let config = Config::get_config(dir.path()).unwrap().unwrap();
+        assert_eq!(config.jobs, 4);
+        assert_eq!(config.build_dir, std::path::PathBuf::from("build"));
+        assert_eq!(config.profile, BuildType::Debug);
+        assert!(config.run_target.is_none());
+    }
+
+    #[test]
+    fn invalid_json_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(CONFIG_FILE), "{ nope").unwrap();
+        assert!(Config::get_config(dir.path()).is_err());
+    }
+
+    #[test]
+    fn round_trips_through_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        Config::new(Some("app".into()))
+            .make_config(dir.path())
+            .unwrap();
+
+        let config = Config::get_config(dir.path()).unwrap().unwrap();
+        assert_eq!(config.run_target.as_deref(), Some("app"));
+    }
+}

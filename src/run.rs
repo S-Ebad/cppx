@@ -65,3 +65,45 @@ fn with_exe_suffix(path: PathBuf) -> PathBuf {
         path
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_exe(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(with_exe_suffix(path.to_path_buf()), "").unwrap();
+    }
+
+    #[test]
+    fn finds_single_config_executable() {
+        let dir = tempfile::tempdir().unwrap();
+        make_exe(&dir.path().join("app"));
+
+        let exe = find_executable(dir.path(), "Debug", "app").unwrap();
+        assert_eq!(exe, with_exe_suffix(dir.path().join("app")));
+    }
+
+    #[test]
+    fn finds_multi_config_executable() {
+        let dir = tempfile::tempdir().unwrap();
+        make_exe(&dir.path().join("Release/app"));
+
+        let exe = find_executable(dir.path(), "Release", "app").unwrap();
+        assert_eq!(exe, with_exe_suffix(dir.path().join("Release/app")));
+    }
+
+    #[test]
+    fn keeps_dots_in_target_names() {
+        let dir = tempfile::tempdir().unwrap();
+        make_exe(&dir.path().join("my.app"));
+
+        assert!(find_executable(dir.path(), "Debug", "my.app").is_ok());
+    }
+
+    #[test]
+    fn missing_executable_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(find_executable(dir.path(), "Debug", "app").is_err());
+    }
+}
