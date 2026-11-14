@@ -50,7 +50,8 @@ target_include_directories(${{PROJECT_NAME}} INTERFACE
     include
 )
 
-if (EXISTS "${{CMAKE_SOURCE_DIR}}/main{LANG_EXT}")
+# only when built directly, so a parent's add_subdirectory never picks up a stray test target
+if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR AND EXISTS "${{CMAKE_CURRENT_SOURCE_DIR}}/main{LANG_EXT}")
     add_executable(${{PROJECT_NAME}}_test main{LANG_EXT})
     target_link_libraries(${{PROJECT_NAME}}_test PRIVATE ${{PROJECT_NAME}})
 
